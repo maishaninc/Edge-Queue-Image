@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPublicRuntimeConfig } from '@/lib/config';
-import { getPriorityRemaining } from '@/lib/queue';
+import { cleanupExpiredJobs, getPriorityRemaining } from '@/lib/queue';
 import { getClientIp, hashIp } from '@/lib/request';
 
 export async function GET(request: NextRequest) {
@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
 
   if (config.priorityQueueEnabled) {
     try {
+      await cleanupExpiredJobs();
       priorityRemaining = await getPriorityRemaining(hashIp(getClientIp(request)));
     } catch {
       priorityRemaining = 0;

@@ -1,16 +1,32 @@
 'use client';
 
 import HCaptcha from '@hcaptcha/react-hcaptcha';
-import { Turnstile } from '@marsidev/react-turnstile';
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import type { CaptchaProvider } from '@/lib/config';
 
 type CaptchaBoxProps = {
   provider: CaptchaProvider;
   siteKey: string;
   onVerify: (token: string) => void;
+  onExpire?: () => void;
 };
 
-export default function CaptchaBox({ provider, siteKey, onVerify }: CaptchaBoxProps) {
+export type CaptchaBoxHandle = {
+  reset: () => void;
+};
+
+function CaptchaBoxInner({ provider, siteKey, onVerify, onExpire }: CaptchaBoxProps, ref: React.Ref<CaptchaBoxHandle>) {
+  const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
+  const hcaptchaRef = useRef<HCaptcha>(null);
+
+  useImperativeHandle(ref, () => ({
+    reset() {
+      turnstileRef.current?.reset();
+      hcaptchaRef.current?.resetCaptcha();
+    },
+  }));
+
   if (provider === 'none') {
     return null;
   }
@@ -22,14 +38,23 @@ export default function CaptchaBox({ provider, siteKey, onVerify }: CaptchaBoxPr
   if (provider === 'turnstile') {
     return (
       <div className="captcha-box">
-        <Turnstile siteKey={siteKey} onSuccess={onVerify} />
+        <Turnstile
+          ref={turnstileRef}
+          siteKey={siteKey}
+          onSuccess={onVerify}
+          onExpire={onExpire}
+          onError={() => onExpire?.()}
+        />
       </div>
     );
   }
 
   return (
     <div className="captcha-box">
-      <HCaptcha sitekey={siteKey} onVerify={onVerify} />
+      <HCaptcha ref={hcaptchaRef} sitekey={siteKey} onVerify={onVerify} onExpire={onExpire} onError={() => onExpire?.()} />
     </div>
   );
 }
+
+const CaptchaBox = forwardRef(CaptchaBoxInner);
+export default CaptchaBox;

@@ -8,7 +8,10 @@ export type ImageModelConfig = {
 export type PublicModel = {
   id: string;
   name: string;
+  icon: ModelIcon;
 };
+
+export type ModelIcon = 'openai' | 'flux' | 'seedream' | 'google' | 'stable' | 'model';
 
 function completeModelGroup(model?: string, key?: string, api?: string) {
   return Boolean(model?.trim() && key?.trim() && api?.trim());
@@ -52,9 +55,19 @@ export function getModelConfigs() {
 }
 
 export function getPublicModels(models = getModelConfigs()): PublicModel[] {
-  return models.map((model) => ({ id: model.id, name: model.name }));
+  return models.map((model) => ({ id: model.id, name: model.name, icon: inferModelIcon(model.name) }));
 }
 
 export function resolveModel(modelId: string, models = getModelConfigs()) {
   return models.find((model) => model.id === modelId);
+}
+
+export function inferModelIcon(name: string): ModelIcon {
+  const normalized = name.toLowerCase();
+  if (normalized.includes('openai') || normalized.includes('gpt')) return 'openai';
+  if (normalized.includes('flux')) return 'flux';
+  if (normalized.includes('seedream') || normalized.includes('doubao')) return 'seedream';
+  if (normalized.includes('gemini') || normalized.includes('imagen')) return 'google';
+  if (normalized.includes('stable') || /\bsd\b/.test(normalized)) return 'stable';
+  return 'model';
 }

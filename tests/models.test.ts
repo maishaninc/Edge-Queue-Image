@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseModelConfigs } from '../src/lib/models';
+import { inferModelIcon, parseModelConfigs } from '../src/lib/models';
 
 test('parses default and numbered model groups', () => {
   const models = parseModelConfigs({
@@ -38,4 +38,13 @@ test('skips incomplete model groups', () => {
   });
 
   assert.deepEqual(models, []);
+});
+
+test('infers public model icons from names', () => {
+  assert.equal(inferModelIcon('gpt-image-1'), 'openai');
+  assert.equal(inferModelIcon('FLUX.1 Kontext'), 'flux');
+  assert.equal(inferModelIcon('seedream-v3'), 'seedream');
+  assert.equal(inferModelIcon('gemini imagen'), 'google');
+  assert.equal(inferModelIcon('stable-diffusion-xl'), 'stable');
+  assert.equal(inferModelIcon('custom-model'), 'model');
 });

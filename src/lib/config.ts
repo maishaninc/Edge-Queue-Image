@@ -7,6 +7,7 @@ export type PublicRuntimeConfig = {
   priorityDailyLimit: number;
   priorityRemaining: number;
   queuePollIntervalMs: number;
+  jobResultTtlMinutes: number;
 };
 
 function integerFromEnv(name: string, fallback: number, min = 0) {
@@ -38,6 +39,7 @@ export function getQueueConfig() {
     runningJobTimeoutSeconds: integerFromEnv('RUNNING_JOB_TIMEOUT_SECONDS', 300, 30),
     priorityQueueEnabled: booleanFromEnv('PRIORITY_QUEUE_ENABLED', true),
     priorityDailyLimit: integerFromEnv('PRIORITY_DAILY_LIMIT', 1, 0),
+    jobResultTtlMinutes: integerFromEnv('JOB_RESULT_TTL_MINUTES', 15, 1),
   };
 }
 
@@ -58,6 +60,7 @@ export function getPublicRuntimeConfig(): PublicRuntimeConfig {
     priorityDailyLimit: queue.priorityDailyLimit,
     priorityRemaining: 0,
     queuePollIntervalMs: queue.pollIntervalMs,
+    jobResultTtlMinutes: queue.jobResultTtlMinutes,
   };
 }
 

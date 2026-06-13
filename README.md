@@ -1,18 +1,20 @@
-# Aivro 免费边缘队列图片生成
+# Aivro 图片生成器
 
 这是一个基于 Next.js 的图片生成站点，内置兼容 Vercel 的队列、兼容 OpenAI 图片接口的模型提供商配置、Turnstile/hCaptcha 支持，以及 Turso/libSQL 持久化。
 
-公开页面位于 `/zh-CN`。用户提交提示词后，可以选择使用每日优先队列，并轮询队列状态直到图片生成完成。
+默认公开页面位于 `/en-US`，根路径 `/` 会跳转到 `/en-US`。用户提交提示词后，可以选择模型、质量、比例和每日优先队列，并轮询队列状态直到图片生成完成。
 
 ## 功能
 
-- 使用 Next.js App Router 构建 `Aivro Free Edge Queue Image` 界面。
+- 使用 Next.js App Router 构建 `Aivro` 界面。
 - 通过环境变量配置多个兼容 OpenAI 图片接口的模型提供商。
 - 使用 Turso/libSQL 存储队列，适配无服务器运行环境。
+- 图片结果临时保存到数据库，保留时间由 `JOB_RESULT_TTL_MINUTES` 控制。
+- 浏览器使用 IndexedDB 保存本地历史任务和图片，直到用户手动删除。
 - 可配置活跃生成并发数和最大等待队列长度。
 - 可选每日优先队列，按 IP 哈希和协调世界时日期统计次数。
-- 验证码提供商可切换为 `none`、`turnstile` 或 `hcaptcha`。
-- 中文界面，并保留便于扩展更多语言的国际化结构。
+- 验证码提供商可切换为 `none`、`turnstile` 或 `hcaptcha`，前端使用弹窗验证。
+- 支持 English、简体中文、繁體中文、日本語四种界面语言。
 
 ## 本地启动
 
@@ -25,8 +27,15 @@ npm run dev
 打开：
 
 ```text
-http://localhost:3000/zh-CN
+http://localhost:3000/en-US
 ```
+
+支持的语言路径：
+
+- `/en-US`
+- `/zh-CN`
+- `/zh-TW`
+- `/ja`
 
 如果本地界面测试不需要验证码，请设置：
 
@@ -87,6 +96,7 @@ API_1=https://provider.example.com
 | `QUEUE_MAX_WAITING` | `200` | `200` | 允许处于 `queued` 状态的最大任务数。达到限制后，新提交会返回 `queue_full`。 |
 | `QUEUE_POLL_INTERVAL_MS` | `3000` | `3000` | 浏览器轮询任务状态的间隔，允许的最小值为 `500`。 |
 | `RUNNING_JOB_TIMEOUT_SECONDS` | `300` | `300` | 超过该时长仍处于运行中的任务，会在领取新任务前被标记为过期。允许的最小值为 `30`。 |
+| `JOB_RESULT_TTL_MINUTES` | `15` | `15` | 图片结果在数据库中的临时保留时间，允许的最小值为 `1`。浏览器本地历史不受该值影响。 |
 
 队列行为：
 
@@ -94,6 +104,16 @@ API_1=https://provider.example.com
 - 轮询 `/api/jobs/[id]` 会推进队列，并领取可执行的任务。
 - 只有当前运行中任务数量低于 `QUEUE_CONCURRENCY` 时，任务才会变为 `running`。
 - 如果 `QUEUE_MAX_WAITING=200`，第 201 个等待中的提交会被拒绝，直到队列消化出空位。
+
+### 图片保存和本地历史
+
+- 生成结果会保存到 Turso/libSQL 的 `jobs.result_url` 或 `jobs.result_b64` 字段。
+- 每个完成、失败或超时任务都会写入 `expires_at`。
+- `JOB_RESULT_TTL_MINUTES` 只控制数据库里的任务和图片结果保留时间。
+- 前端会显示数据库保留倒计时。
+- 浏览器本地历史使用 IndexedDB 保存历史任务和图片，不自动过期。
+- 用户可以删除单条本地历史，也可以清空全部历史。
+- 清除浏览器站点数据会删除本地历史。
 
 ### 优先队列
 
@@ -197,6 +217,7 @@ QUEUE_CONCURRENCY=50
 QUEUE_MAX_WAITING=200
 QUEUE_POLL_INTERVAL_MS=3000
 RUNNING_JOB_TIMEOUT_SECONDS=300
+JOB_RESULT_TTL_MINUTES=15
 PRIORITY_QUEUE_ENABLED=true
 PRIORITY_DAILY_LIMIT=1
 IP_HASH_SALT=use-a-long-random-secret-value
@@ -204,10 +225,10 @@ IP_HASH_SALT=use-a-long-random-secret-value
 
 ## API 概览
 
-- `GET /api/config` 返回公开运行时配置、验证码站点密钥、轮询间隔和剩余优先次数。
-- `GET /api/models` 返回公开模型 ID 和名称。
-- `POST /api/jobs` 验证验证码、创建排队任务，并返回任务 ID。
-- `GET /api/jobs/[id]` 推进队列，并返回任务状态、队列位置、运行中任务数、等待中任务数和结果数据。
+- `GET /api/config` 返回公开运行时配置、验证码站点密钥、轮询间隔、数据库结果保留时间和剩余优先次数。
+- `GET /api/models` 返回公开模型 ID、名称和图标类型。
+- `POST /api/jobs` 验证验证码、创建排队任务，并记录质量和比例。
+- `GET /api/jobs/[id]` 推进队列，并返回任务状态、队列位置、运行中任务数、等待中任务数、过期时间和结果数据。
 
 ## 验证
 
@@ -216,4 +237,4 @@ npm test
 npm run build
 ```
 
-测试套件覆盖模型解析和队列排序规则。
+测试套件覆盖模型解析、模型图标、图片参数映射、验证码错误码、配置解析和队列排序规则。

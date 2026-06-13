@@ -3,6 +3,7 @@ import { verifyCaptcha } from '@/lib/captcha';
 import { createJob } from '@/lib/queue';
 import { getClientIp, hashIp } from '@/lib/request';
 import { resolveModel } from '@/lib/models';
+import { areImageOptionsValid, normalizeImageOptions } from '@/lib/image-options';
 
 const MAX_PROMPT_LENGTH = 4000;
 
@@ -11,6 +12,8 @@ type CreateJobBody = {
   modelId?: string;
   captchaToken?: string;
   usePriority?: boolean;
+  quality?: string;
+  aspectRatio?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -27,9 +30,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'model_not_found' }, { status: 400 });
   }
 
+  if (!areImageOptionsValid({ quality: body.quality, aspectRatio: body.aspectRatio })) {
+    return NextResponse.json({ error: 'invalid_image_options' }, { status: 400 });
+  }
+
+  const imageOptions = normalizeImageOptions({ quality: body.quality, aspectRatio: body.aspectRatio });
+
   const captcha = await verifyCaptcha(body.captchaToken, ip);
   if (!captcha.ok) {
-    return NextResponse.json({ error: 'captcha_failed' }, { status: 400 });
+    return NextResponse.json({ error: captcha.error || 'captcha_invalid' }, { status: 400 });
   }
 
   try {
@@ -38,6 +47,8 @@ export async function POST(request: NextRequest) {
       modelId,
       ipHash: hashIp(ip),
       usePriority: Boolean(body.usePriority),
+      quality: imageOptions.quality,
+      aspectRatio: imageOptions.aspectRatio,
     });
 
     if (!created.ok) {

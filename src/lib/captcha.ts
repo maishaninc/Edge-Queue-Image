@@ -6,8 +6,12 @@ export type CaptchaResult = {
 };
 
 async function verifyFormEndpoint(url: string, secret: string, token: string, remoteIp?: string): Promise<CaptchaResult> {
-  if (!secret || !token) {
+  if (!token) {
     return { ok: false, error: 'captcha_missing' };
+  }
+
+  if (!secret) {
+    return { ok: false, error: 'captcha_secret_missing' };
   }
 
   const body = new URLSearchParams();
@@ -17,18 +21,23 @@ async function verifyFormEndpoint(url: string, secret: string, token: string, re
     body.set('remoteip', remoteIp);
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+  } catch {
+    return { ok: false, error: 'captcha_unreachable' };
+  }
 
   if (!response.ok) {
     return { ok: false, error: 'captcha_unreachable' };
   }
 
-  const data = (await response.json()) as { success?: boolean };
-  return data.success ? { ok: true } : { ok: false, error: 'captcha_failed' };
+  const data = (await response.json().catch(() => ({}))) as { success?: boolean };
+  return data.success ? { ok: true } : { ok: false, error: 'captcha_invalid' };
 }
 
 export async function verifyCaptcha(token: string | undefined, remoteIp?: string): Promise<CaptchaResult> {

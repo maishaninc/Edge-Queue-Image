@@ -1,10 +1,12 @@
 import type { ImageModelConfig } from './models';
+import { normalizeImageOptions, type ImageAspectRatio, type ImageQuality } from './image-options';
 
 export type GenerateImageInput = {
   model: ImageModelConfig;
   prompt: string;
-  size: string;
   count: number;
+  quality: ImageQuality;
+  aspectRatio: ImageAspectRatio;
 };
 
 export type GenerateImageResult = {
@@ -24,6 +26,8 @@ type OpenAIImageResponse = {
 };
 
 export async function generateImage(input: GenerateImageInput): Promise<GenerateImageResult> {
+  const { size } = normalizeImageOptions({ quality: input.quality, aspectRatio: input.aspectRatio });
+
   const response = await fetch(`${input.model.api}/v1/images/generations`, {
     method: 'POST',
     headers: {
@@ -33,7 +37,7 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
     body: JSON.stringify({
       model: input.model.name,
       prompt: input.prompt,
-      size: input.size,
+      size,
       n: input.count,
     }),
   });

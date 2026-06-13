@@ -2,6 +2,7 @@ import type { Client } from '@libsql/client';
 import { getQueueConfig } from './config';
 import { ensureSchema, getDb } from './db';
 import { generateImage } from './image-provider';
+import type { ImageAspectRatio, ImageQuality } from './image-options';
 import { resolveModel } from './models';
 import { todayUtc } from './request';
 
@@ -17,6 +18,9 @@ export type QueueJob = {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  expires_at: string | null;
+  quality: ImageQuality;
+  aspect_ratio: ImageAspectRatio;
   result_url: string | null;
   result_b64: string | null;
   error_code: string | null;
@@ -54,6 +58,9 @@ function rowToJob(row: Record<string, unknown>): QueueJob {
     created_at: String(row.created_at),
     started_at: row.started_at ? String(row.started_at) : null,
     finished_at: row.finished_at ? String(row.finished_at) : null,
+    expires_at: row.expires_at ? String(row.expires_at) : null,
+    quality: (row.quality ? String(row.quality) : '1K') as ImageQuality,
+    aspect_ratio: (row.aspect_ratio ? String(row.aspect_ratio) : '1:1') as ImageAspectRatio,
     result_url: row.result_url ? String(row.result_url) : null,
     result_b64: row.result_b64 ? String(row.result_b64) : null,
     error_code: row.error_code ? String(row.error_code) : null,
@@ -95,9 +102,12 @@ export async function createJob(input: {
   modelId: string;
   ipHash: string;
   usePriority: boolean;
+  quality: ImageQuality;
+  aspectRatio: ImageAspectRatio;
 }) {
   const db = getDb();
   await ensureSchema(db);
+  await cleanupExpiredJobs(db);
   const config = getQueueConfig();
 
   const waitingResult = await db.execute('SELECT COUNT(*) AS count FROM jobs WHERE status = "queued"');
@@ -117,22 +127,44 @@ export async function createJob(input: {
 
   const id = crypto.randomUUID();
   await db.execute({
-    sql: `INSERT INTO jobs (id, status, prompt, model_id, is_priority, ip_hash, created_at)
-      VALUES (?, 'queued', ?, ?, ?, ?, ?)`,
-    args: [id, input.prompt, input.modelId, priority ? 1 : 0, input.ipHash, new Date().toISOString()],
+    sql: `INSERT INTO jobs (id, status, prompt, model_id, is_priority, ip_hash, created_at, quality, aspect_ratio)
+      VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      input.prompt,
+      input.modelId,
+      priority ? 1 : 0,
+      input.ipHash,
+      new Date().toISOString(),
+      input.quality,
+      input.aspectRatio,
+    ],
   });
 
   return { ok: true as const, id, isPriority: priority };
 }
 
+export async function cleanupExpiredJobs(db = getDb()) {
+  await ensureSchema(db);
+  await db.execute({
+    sql: 'DELETE FROM jobs WHERE expires_at IS NOT NULL AND expires_at < ?',
+    args: [new Date().toISOString()],
+  });
+}
+
+function resultExpiresAt(now = new Date()) {
+  return new Date(now.getTime() + getQueueConfig().jobResultTtlMinutes * 60 * 1000).toISOString();
+}
+
 export async function releaseExpiredRunningJobs(db = getDb()) {
   await ensureSchema(db);
   const cutoff = new Date(Date.now() - getQueueConfig().runningJobTimeoutSeconds * 1000).toISOString();
+  const now = new Date();
   await db.execute({
     sql: `UPDATE jobs
-      SET status = 'expired', finished_at = ?, error_code = 'job_timeout', error_message_safe = 'Generation timed out.'
+      SET status = 'expired', finished_at = ?, expires_at = ?, error_code = 'job_timeout', error_message_safe = 'Generation timed out.'
       WHERE status = 'running' AND started_at < ?`,
-    args: [new Date().toISOString(), cutoff],
+    args: [now.toISOString(), resultExpiresAt(now), cutoff],
   });
 }
 
@@ -234,20 +266,23 @@ export async function runClaimedJob(job: QueueJob, db = getDb()) {
     const result = await generateImage({
       model,
       prompt: job.prompt,
-      size: '1024x1024',
       count: 1,
+      quality: job.quality,
+      aspectRatio: job.aspect_ratio,
     });
 
+    const now = new Date();
     await db.execute({
-      sql: `UPDATE jobs SET status = 'succeeded', finished_at = ?, result_url = ?, result_b64 = ?
+      sql: `UPDATE jobs SET status = 'succeeded', finished_at = ?, expires_at = ?, result_url = ?, result_b64 = ?
         WHERE id = ?`,
-      args: [new Date().toISOString(), result.url || null, result.b64 || null, job.id],
+      args: [now.toISOString(), resultExpiresAt(now), result.url || null, result.b64 || null, job.id],
     });
   } catch {
+    const now = new Date();
     await db.execute({
-      sql: `UPDATE jobs SET status = 'failed', finished_at = ?, error_code = 'provider_failed', error_message_safe = ?
+      sql: `UPDATE jobs SET status = 'failed', finished_at = ?, expires_at = ?, error_code = 'provider_failed', error_message_safe = ?
         WHERE id = ?`,
-      args: [new Date().toISOString(), 'Image generation failed. Please try again later.', job.id],
+      args: [now.toISOString(), resultExpiresAt(now), 'Image generation failed. Please try again later.', job.id],
     });
   }
 }
@@ -255,6 +290,7 @@ export async function runClaimedJob(job: QueueJob, db = getDb()) {
 export async function advanceQueue(limit = 1) {
   const db = getDb();
   await ensureSchema(db);
+  await cleanupExpiredJobs(db);
   await releaseExpiredRunningJobs(db);
 
   const claimed: QueueJob[] = [];
