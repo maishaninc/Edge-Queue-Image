@@ -5,6 +5,22 @@ export type CaptchaResult = {
   error?: string;
 };
 
+type CaptchaVerifyResponse = {
+  success?: boolean;
+  'error-codes'?: string[];
+};
+
+function mapCaptchaError(data: CaptchaVerifyResponse): string {
+  const errors = data['error-codes'] || [];
+  if (errors.some((error) => error.includes('secret'))) {
+    return 'captcha_secret_missing';
+  }
+  if (errors.some((error) => error.includes('missing-input-response'))) {
+    return 'captcha_missing';
+  }
+  return 'captcha_invalid';
+}
+
 async function verifyFormEndpoint(url: string, secret: string, token: string, remoteIp?: string): Promise<CaptchaResult> {
   if (!token) {
     return { ok: false, error: 'captcha_missing' };
@@ -32,12 +48,15 @@ async function verifyFormEndpoint(url: string, secret: string, token: string, re
     return { ok: false, error: 'captcha_unreachable' };
   }
 
-  if (!response.ok) {
+  const data = (await response.json().catch(() => null)) as CaptchaVerifyResponse | null;
+  if (!response.ok && !data) {
     return { ok: false, error: 'captcha_unreachable' };
   }
+  if (!data) {
+    return { ok: false, error: 'captcha_invalid' };
+  }
 
-  const data = (await response.json().catch(() => ({}))) as { success?: boolean };
-  return data.success ? { ok: true } : { ok: false, error: 'captcha_invalid' };
+  return data.success ? { ok: true } : { ok: false, error: mapCaptchaError(data) };
 }
 
 export async function verifyCaptcha(token: string | undefined, remoteIp?: string): Promise<CaptchaResult> {
