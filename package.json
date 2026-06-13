@@ -1,0 +1,30 @@
+{
+  "name": "aivro-free-edge-queue-image",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@hcaptcha/react-hcaptcha": "^2.0.2",
+    "@libsql/client": "^0.15.15",
+    "@marsidev/react-turnstile": "^1.3.2",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}
