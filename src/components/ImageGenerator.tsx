@@ -108,6 +108,7 @@ function blobUrlFor(item: HistoryItem) {
 export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const copy = COPY[locale];
   const captchaRef = useRef<CaptchaBoxHandle>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const activeJobIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
@@ -172,6 +173,13 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   useEffect(() => {
     refreshHistory();
   }, [refreshHistory]);
+
+  useEffect(() => {
+    const node = promptInputRef.current;
+    if (!node) return;
+    node.style.height = 'auto';
+    node.style.height = `${node.scrollHeight}px`;
+  }, [prompt]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => setNow(Date.now()), 0);
@@ -460,12 +468,19 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
               <label className="sr-only" htmlFor="prompt-command-input">
                 {copy.promptLabel}
               </label>
-              <input
+              <textarea
                 id="prompt-command-input"
+                ref={promptInputRef}
                 className="prompt-command-input"
-                type="text"
                 value={prompt}
+                rows={1}
                 onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    requestSubmit();
+                  }
+                }}
                 placeholder={copy.promptBarPlaceholder}
                 maxLength={4000}
                 disabled={closing}

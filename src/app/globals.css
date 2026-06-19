@@ -299,7 +299,7 @@ a {
   overflow: hidden;
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--border);
@@ -357,14 +357,19 @@ a {
 
 .prompt-command-input {
   min-width: 0;
-  height: 54px;
-  flex: 1 1 520px;
+  min-height: 44px;
+  max-height: 220px;
+  flex: 1 1 420px;
   border: 0;
   background: transparent;
   color: var(--foreground);
   outline: none;
-  padding: 0 12px;
+  padding: 9px 12px;
   font-size: 16px;
+  font-family: inherit;
+  line-height: 24px;
+  resize: none;
+  overflow-y: auto;
 }
 
 .prompt-command-input::placeholder {
@@ -372,12 +377,13 @@ a {
 }
 
 .command-controls {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  min-width: max-content;
+  min-width: 0;
 }
 
 .command-controls select {
