@@ -7,7 +7,7 @@ let schemaReady: Promise<void> | null = null;
 export function getDb() {
   if (client) return client;
   const { url, authToken } = getTursoConfig();
-  if (!url || !authToken) {
+  if (!url || (!authToken && !url.startsWith('file:'))) {
     throw new Error('Turso is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.');
   }
   client = createClient({ url, authToken });

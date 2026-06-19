@@ -73,5 +73,7 @@ export function getTursoConfig() {
 
 export function isDatabaseConfigured() {
   const { url, authToken } = getTursoConfig();
-  return Boolean(url && authToken);
+  if (!url) return false;
+  if (url.startsWith('file:')) return true;
+  return Boolean(authToken);
 }

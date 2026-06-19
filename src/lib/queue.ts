@@ -110,7 +110,7 @@ export async function createJob(input: {
   await cleanupExpiredJobs(db);
   const config = getQueueConfig();
 
-  const waitingResult = await db.execute('SELECT COUNT(*) AS count FROM jobs WHERE status = "queued"');
+  const waitingResult = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE status = 'queued'");
   const waitingCount = Number(waitingResult.rows[0]?.count || 0);
   if (waitingCount >= config.maxWaiting) {
     return { ok: false as const, error: 'queue_full' };
@@ -183,7 +183,7 @@ async function getQueuedJobs(db: Client) {
 export async function getQueueSnapshot(jobId: string, db = getDb()): Promise<QueueSnapshot> {
   await ensureSchema(db);
   const [runningResult, queuedJobs] = await Promise.all([
-    db.execute('SELECT COUNT(*) AS count FROM jobs WHERE status = "running"'),
+    db.execute("SELECT COUNT(*) AS count FROM jobs WHERE status = 'running'"),
     getQueuedJobs(db),
   ]);
 
@@ -213,7 +213,7 @@ export async function claimNextJob(db = getDb()) {
   const transaction = await db.transaction('write');
 
   try {
-    const runningResult = await transaction.execute('SELECT COUNT(*) AS count FROM jobs WHERE status = "running"');
+    const runningResult = await transaction.execute("SELECT COUNT(*) AS count FROM jobs WHERE status = 'running'");
     const runningCount = Number(runningResult.rows[0]?.count || 0);
     if (runningCount >= config.concurrency) {
       await transaction.rollback();
