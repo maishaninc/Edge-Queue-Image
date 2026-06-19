@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { OpenAI } from '@lobehub/icons';
 import CaptchaBox, { type CaptchaBoxHandle } from './CaptchaBox';
 import GenerationLoader from './GenerationLoader';
 import type { CaptchaProvider } from '@/lib/config';
 import { COPY, type SiteLocale } from '@/lib/i18n';
-import { IMAGE_ASPECT_RATIOS, IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
+import { IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
 import {
   base64ToBlob,
   clearHistoryItems,
@@ -59,6 +60,21 @@ type StringCopyKey = {
   [Key in keyof typeof COPY['zh-CN']]: (typeof COPY)['zh-CN'][Key] extends string ? Key : never;
 }[keyof typeof COPY['zh-CN']];
 
+const ACTIVE_JOB_STORAGE_KEY = 'aivro-active-generation-job';
+const FIXED_ASPECT_RATIO: ImageAspectRatio = '1:1';
+
+type SubmittedJobSnapshot = {
+  prompt: string;
+  modelId: string;
+  modelName: string;
+  quality: ImageQuality;
+  aspectRatio: ImageAspectRatio;
+};
+
+type StoredActiveJob = SubmittedJobSnapshot & {
+  id: string;
+};
+
 const ERROR_MESSAGES: Record<string, StringCopyKey> = {
   queue_full: 'queueFull',
   captcha_failed: 'captchaInvalid',
@@ -79,9 +95,8 @@ function errorMessage(copy: (typeof COPY)['zh-CN'], code: string) {
   return copy[ERROR_MESSAGES[code] || 'databaseUnavailable'];
 }
 
-function iconLabel(icon: string) {
+function fallbackIconLabel(icon: string) {
   const labels: Record<string, string> = {
-    openai: 'OA',
     flux: 'FX',
     seedream: 'SD',
     google: 'G',
@@ -89,6 +104,18 @@ function iconLabel(icon: string) {
     model: 'AI',
   };
   return labels[icon] || labels.model;
+}
+
+function ModelIcon({ icon }: { icon: string }) {
+  if (icon === 'openai') {
+    return (
+      <span className="model-icon openai" aria-hidden="true">
+        <OpenAI size={16} />
+      </span>
+    );
+  }
+
+  return <span className={`model-icon ${icon}`}>{fallbackIconLabel(icon)}</span>;
 }
 
 function formatCountdown(expiresAt: string | null, now: number) {
@@ -105,39 +132,51 @@ function blobUrlFor(item: HistoryItem) {
   return URL.createObjectURL(item.imageBlob);
 }
 
+function readStoredActiveJob(): StoredActiveJob | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(ACTIVE_JOB_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    const stored = JSON.parse(raw) as Partial<StoredActiveJob>;
+    if (!stored.id || !stored.prompt || !stored.modelId) return null;
+    return {
+      id: stored.id,
+      prompt: stored.prompt,
+      modelId: stored.modelId,
+      modelName: stored.modelName || stored.modelId,
+      quality: stored.quality || '1K',
+      aspectRatio: FIXED_ASPECT_RATIO,
+    };
+  } catch {
+    window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
+    return null;
+  }
+}
+
 export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const copy = COPY[locale];
+  const [initialActiveJob] = useState<StoredActiveJob | null>(() => readStoredActiveJob());
   const captchaRef = useRef<CaptchaBoxHandle>(null);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const activeJobIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
   const savedJobIds = useRef(new Set<string>());
-  const submittedJobs = useRef(
-    new Map<
-      string,
-      {
-        prompt: string;
-        modelId: string;
-        modelName: string;
-        quality: ImageQuality;
-        aspectRatio: ImageAspectRatio;
-      }
-    >(),
-  );
+  const submittedJobs = useRef(new Map<string, SubmittedJobSnapshot>());
 
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [models, setModels] = useState<PublicModel[]>([]);
-  const [prompt, setPrompt] = useState('');
-  const [modelId, setModelId] = useState('default');
-  const [quality, setQuality] = useState<ImageQuality>('1K');
-  const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>('1:1');
+  const [prompt, setPrompt] = useState(initialActiveJob?.prompt || '');
+  const [modelId, setModelId] = useState(initialActiveJob?.modelId || 'default');
+  const [quality, setQuality] = useState<ImageQuality>(initialActiveJob?.quality || '1K');
+  const [aspectRatio] = useState<ImageAspectRatio>(FIXED_ASPECT_RATIO);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaOpen, setCaptchaOpen] = useState(false);
   const [usePriority, setUsePriority] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(initialActiveJob?.id || null);
   const [jobState, setJobState] = useState<JobResponse | null>(null);
   const [error, setError] = useState('');
   const [historyError, setHistoryError] = useState('');
@@ -162,6 +201,18 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
       })
       .catch(() => setError(copy.databaseUnavailable));
   }, [copy.databaseUnavailable]);
+
+  useEffect(() => {
+    if (!initialActiveJob) return;
+    submittedJobs.current.set(initialActiveJob.id, {
+      prompt: initialActiveJob.prompt,
+      modelId: initialActiveJob.modelId,
+      modelName: initialActiveJob.modelName,
+      quality: initialActiveJob.quality,
+      aspectRatio: FIXED_ASPECT_RATIO,
+    });
+    activeJobIdRef.current = initialActiveJob.id;
+  }, [initialActiveJob]);
 
   const refreshHistory = useCallback(() => {
     if (!('indexedDB' in window)) return;
@@ -193,6 +244,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   useEffect(() => {
     return () => {
       activeJobIdRef.current = null;
+      window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
       if (closeTimerRef.current) {
         window.clearTimeout(closeTimerRef.current);
       }
@@ -344,13 +396,15 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
       setClosing(true);
       setJobId(null);
       setJobState(null);
-      submittedJobs.current.set(data.id, {
+      const snapshot: SubmittedJobSnapshot = {
         prompt,
         modelId,
         modelName: selectedModel?.name || modelId,
         quality,
-        aspectRatio,
-      });
+        aspectRatio: FIXED_ASPECT_RATIO,
+      };
+      submittedJobs.current.set(data.id, snapshot);
+      window.localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, JSON.stringify({ id: data.id, ...snapshot }));
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const closeDelay = reducedMotion ? 0 : 360;
       closeTimerRef.current = window.setTimeout(() => {
@@ -402,7 +456,6 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
     setPrompt(item.prompt);
     setModelId(item.modelId);
     setQuality(item.quality);
-    setAspectRatio(item.aspectRatio);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -428,6 +481,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const visibleHistory = historyExpanded ? history : history.slice(0, 4);
   const queueRank = jobState?.queue.queuePosition;
   const generationStatus = jobState?.job.status;
+  const isGeneratingView = Boolean(jobId);
   const generationError =
     jobState?.job.errorMessage ||
     (jobState?.job.errorCode ? errorMessage(copy, jobState.job.errorCode) : copy.providerFailed);
@@ -448,7 +502,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   return (
     <main className="workspace">
       <section className="hero-workspace" id="generator">
-        <div className="command-hero">
+        <div className={`command-hero${isGeneratingView ? ' generating' : ''}`}>
           <div className="command-copy">
             <p className="eyebrow">AI Image Queue</p>
             <h1>
@@ -457,115 +511,106 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
             <p>{copy.heroTagline}</p>
           </div>
 
-          <form
-            className="command-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              requestSubmit();
-            }}
-          >
-            <div className={`prompt-command-bar${closing ? ' closing' : ''}`}>
-              <label className="sr-only" htmlFor="prompt-command-input">
-                {copy.promptLabel}
-              </label>
-              <textarea
-                id="prompt-command-input"
-                ref={promptInputRef}
-                className="prompt-command-input"
-                value={prompt}
-                rows={1}
-                onChange={(event) => setPrompt(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    requestSubmit();
-                  }
-                }}
-                placeholder={copy.promptBarPlaceholder}
-                maxLength={4000}
-                disabled={closing}
-              />
-              <div className="command-controls">
-                <label className="sr-only" htmlFor="quality-command-select">
-                  {copy.qualityLabel}
+          {!isGeneratingView ? (
+            <form
+              className="command-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                requestSubmit();
+              }}
+            >
+              <div className={`prompt-command-bar${closing ? ' closing' : ''}`}>
+                <label className="sr-only" htmlFor="prompt-command-input">
+                  {copy.promptLabel}
                 </label>
-                <select
-                  id="quality-command-select"
-                  value={quality}
-                  onChange={(event) => setQuality(event.target.value as ImageQuality)}
-                  aria-label={copy.qualityLabel}
+                <textarea
+                  id="prompt-command-input"
+                  ref={promptInputRef}
+                  className="prompt-command-input"
+                  value={prompt}
+                  rows={1}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      requestSubmit();
+                    }
+                  }}
+                  placeholder={copy.promptBarPlaceholder}
+                  maxLength={4000}
                   disabled={closing}
-                >
-                  {IMAGE_QUALITIES.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-                <label className="sr-only" htmlFor="aspect-command-select">
-                  {copy.aspectRatioLabel}
-                </label>
-                <select
-                  id="aspect-command-select"
-                  value={aspectRatio}
-                  onChange={(event) => setAspectRatio(event.target.value as ImageAspectRatio)}
-                  aria-label={copy.aspectRatioLabel}
-                  disabled={closing}
-                >
-                  {IMAGE_ASPECT_RATIOS.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-
-                {config?.priorityQueueEnabled ? (
-                  <label className="priority-inline" title={copy.priorityHint.replace('{count}', String(config.priorityRemaining || 0))}>
-                    <input
-                      type="checkbox"
-                      checked={usePriority}
-                      onChange={(event) => setUsePriority(event.target.checked)}
-                      disabled={closing || (config.priorityRemaining || 0) <= 0}
-                    />
-                    <span>{copy.priorityLabel}</span>
+                />
+                <div className="command-controls">
+                  <label className="sr-only" htmlFor="quality-command-select">
+                    {copy.qualityLabel}
                   </label>
-                ) : null}
-
-                {models.length > 1 ? (
-                  <div className="model-list compact inline-models" role="radiogroup" aria-label={copy.modelLabel}>
-                    {models.map((model) => (
-                      <label key={model.id} className={`model-chip${modelId === model.id ? ' active' : ''}`}>
-                        <input
-                          className="sr-only"
-                          type="radio"
-                          name="image-model"
-                          value={model.id}
-                          checked={modelId === model.id}
-                          onChange={() => setModelId(model.id)}
-                          disabled={closing}
-                        />
-                        <span className={`model-icon ${model.icon}`}>{iconLabel(model.icon)}</span>
-                        <span>{model.name}</span>
-                      </label>
+                  <select
+                    id="quality-command-select"
+                    value={quality}
+                    onChange={(event) => setQuality(event.target.value as ImageQuality)}
+                    aria-label={copy.qualityLabel}
+                    disabled={closing}
+                  >
+                    {IMAGE_QUALITIES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
+                  </select>
+                  <div className="fixed-ratio" aria-label={copy.aspectRatioLabel}>
+                    {aspectRatio}
                   </div>
-                ) : models.length === 1 && selectedModel ? (
-                  <div className="selected-model-label inline-model" aria-label={copy.modelLabel}>
-                    <span className={`model-icon ${selectedModel.icon}`}>{iconLabel(selectedModel.icon)}</span>
-                    <span>{selectedModel.name}</span>
-                  </div>
-                ) : (
-                  <div className="notice error compact-notice">{copy.modelMissing}</div>
-                )}
 
-                <button className="primary-button command-submit" type="submit" disabled={submitting || closing || !prompt.trim() || !models.length}>
-                  {submitting ? copy.submitting : copy.submit}
-                </button>
+                  {config?.priorityQueueEnabled ? (
+                    <label className="priority-inline" title={copy.priorityHint.replace('{count}', String(config.priorityRemaining || 0))}>
+                      <input
+                        type="checkbox"
+                        checked={usePriority}
+                        onChange={(event) => setUsePriority(event.target.checked)}
+                        disabled={closing || (config.priorityRemaining || 0) <= 0}
+                      />
+                      <span>{copy.priorityLabel}</span>
+                    </label>
+                  ) : null}
+
+                  <div className="model-submit-group">
+                    {models.length > 1 ? (
+                      <div className="model-list compact inline-models" role="radiogroup" aria-label={copy.modelLabel}>
+                        {models.map((model) => (
+                          <label key={model.id} className={`model-chip${modelId === model.id ? ' active' : ''}`}>
+                            <input
+                              className="sr-only"
+                              type="radio"
+                              name="image-model"
+                              value={model.id}
+                              checked={modelId === model.id}
+                              onChange={() => setModelId(model.id)}
+                              disabled={closing}
+                            />
+                            <ModelIcon icon={model.icon} />
+                            <span>{model.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : models.length === 1 && selectedModel ? (
+                      <div className="selected-model-label inline-model" aria-label={copy.modelLabel}>
+                        <ModelIcon icon={selectedModel.icon} />
+                        <span>{selectedModel.name}</span>
+                      </div>
+                    ) : (
+                      <div className="notice error compact-notice">{copy.modelMissing}</div>
+                    )}
+
+                    <button className="primary-button command-submit" type="submit" disabled={submitting || closing || !prompt.trim() || !models.length}>
+                      {submitting ? copy.submitting : copy.submit}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {error ? <div className="notice error command-error">{error}</div> : null}
-          </form>
+              {error ? <div className="notice error command-error">{error}</div> : null}
+            </form>
+          ) : null}
 
           {showGenerationStage ? (
             <section className="panel generation-stage" aria-live="polite">
