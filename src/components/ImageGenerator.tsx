@@ -470,7 +470,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
                 maxLength={4000}
                 disabled={closing}
               />
-              <div className="command-selects">
+              <div className="command-controls">
                 <label className="sr-only" htmlFor="quality-command-select">
                   {copy.qualityLabel}
                 </label>
@@ -503,54 +503,50 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
                     </option>
                   ))}
                 </select>
+
+                {config?.priorityQueueEnabled ? (
+                  <label className="priority-inline" title={copy.priorityHint.replace('{count}', String(config.priorityRemaining || 0))}>
+                    <input
+                      type="checkbox"
+                      checked={usePriority}
+                      onChange={(event) => setUsePriority(event.target.checked)}
+                      disabled={closing || (config.priorityRemaining || 0) <= 0}
+                    />
+                    <span>{copy.priorityLabel}</span>
+                  </label>
+                ) : null}
+
+                {models.length > 1 ? (
+                  <div className="model-list compact inline-models" role="radiogroup" aria-label={copy.modelLabel}>
+                    {models.map((model) => (
+                      <label key={model.id} className={`model-chip${modelId === model.id ? ' active' : ''}`}>
+                        <input
+                          className="sr-only"
+                          type="radio"
+                          name="image-model"
+                          value={model.id}
+                          checked={modelId === model.id}
+                          onChange={() => setModelId(model.id)}
+                          disabled={closing}
+                        />
+                        <span className={`model-icon ${model.icon}`}>{iconLabel(model.icon)}</span>
+                        <span>{model.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : models.length === 1 && selectedModel ? (
+                  <div className="selected-model-label inline-model" aria-label={copy.modelLabel}>
+                    <span className={`model-icon ${selectedModel.icon}`}>{iconLabel(selectedModel.icon)}</span>
+                    <span>{selectedModel.name}</span>
+                  </div>
+                ) : (
+                  <div className="notice error compact-notice">{copy.modelMissing}</div>
+                )}
+
+                <button className="primary-button command-submit" type="submit" disabled={submitting || closing || !prompt.trim() || !models.length}>
+                  {submitting ? copy.submitting : copy.submit}
+                </button>
               </div>
-              <button className="primary-button command-submit" type="submit" disabled={submitting || closing || !prompt.trim() || !models.length}>
-                {submitting ? copy.submitting : copy.submit}
-              </button>
-            </div>
-
-            <div className="secondary-controls">
-              {models.length > 1 ? (
-                <div className="model-list compact" role="radiogroup" aria-label={copy.modelLabel}>
-                  {models.map((model) => (
-                    <label key={model.id} className={`model-chip${modelId === model.id ? ' active' : ''}`}>
-                      <input
-                        className="sr-only"
-                        type="radio"
-                        name="image-model"
-                        value={model.id}
-                        checked={modelId === model.id}
-                        onChange={() => setModelId(model.id)}
-                        disabled={closing}
-                      />
-                      <span className={`model-icon ${model.icon}`}>{iconLabel(model.icon)}</span>
-                      <span>{model.name}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : models.length === 1 && selectedModel ? (
-                <div className="selected-model-label" aria-label={copy.modelLabel}>
-                  <span className={`model-icon ${selectedModel.icon}`}>{iconLabel(selectedModel.icon)}</span>
-                  <span>{selectedModel.name}</span>
-                </div>
-              ) : (
-                <div className="notice error compact-notice">{copy.modelMissing}</div>
-              )}
-
-              {config?.priorityQueueEnabled ? (
-                <label className="priority-toggle compact">
-                  <input
-                    type="checkbox"
-                    checked={usePriority}
-                    onChange={(event) => setUsePriority(event.target.checked)}
-                    disabled={closing || (config.priorityRemaining || 0) <= 0}
-                  />
-                  <span>
-                    {copy.priorityLabel}
-                    <small>{copy.priorityHint.replace('{count}', String(config.priorityRemaining || 0))}</small>
-                  </span>
-                </label>
-              ) : null}
             </div>
 
             {error ? <div className="notice error command-error">{error}</div> : null}
