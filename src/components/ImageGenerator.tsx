@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CaptchaBox, { type CaptchaBoxHandle } from './CaptchaBox';
+import GenerationLoader from './GenerationLoader';
 import type { CaptchaProvider } from '@/lib/config';
 import { COPY, type SiteLocale } from '@/lib/i18n';
 import { IMAGE_ASPECT_RATIOS, IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
@@ -58,14 +59,6 @@ type StringCopyKey = {
   [Key in keyof typeof COPY['zh-CN']]: (typeof COPY)['zh-CN'][Key] extends string ? Key : never;
 }[keyof typeof COPY['zh-CN']];
 
-const STATUS_LABELS: Record<JobStatus, StringCopyKey> = {
-  queued: 'statusQueued',
-  running: 'statusRunning',
-  succeeded: 'statusSucceeded',
-  failed: 'statusFailed',
-  expired: 'statusExpired',
-};
-
 const ERROR_MESSAGES: Record<string, StringCopyKey> = {
   queue_full: 'queueFull',
   captcha_failed: 'captchaInvalid',
@@ -115,6 +108,9 @@ function blobUrlFor(item: HistoryItem) {
 export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const copy = COPY[locale];
   const captchaRef = useRef<CaptchaBoxHandle>(null);
+  const activeJobIdRef = useRef<string | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const copiedTimerRef = useRef<number | null>(null);
   const savedJobIds = useRef(new Set<string>());
   const submittedJobs = useRef(
     new Map<
@@ -139,6 +135,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const [captchaOpen, setCaptchaOpen] = useState(false);
   const [usePriority, setUsePriority] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobState, setJobState] = useState<JobResponse | null>(null);
   const [error, setError] = useState('');
@@ -187,6 +184,18 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
 
   useEffect(() => {
     return () => {
+      activeJobIdRef.current = null;
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+      if (copiedTimerRef.current) {
+        window.clearTimeout(copiedTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       if (historyPreview) URL.revokeObjectURL(historyPreview.url);
     };
   }, [historyPreview]);
@@ -207,7 +216,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
     if (!response.ok) {
       throw new Error(data.error || 'database_unavailable');
     }
-    setJobState(data);
+    return data as JobResponse;
   }, []);
 
   useEffect(() => {
@@ -217,9 +226,12 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
 
     async function tick() {
       try {
-        await loadJob(currentJobId);
+        const data = await loadJob(currentJobId);
+        if (!cancelled && activeJobIdRef.current === currentJobId && data.job.id === currentJobId) {
+          setJobState(data);
+        }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && activeJobIdRef.current === currentJobId) {
           const code = err instanceof Error ? err.message : 'database_unavailable';
           setError(errorMessage(copy, code));
         }
@@ -279,6 +291,23 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
     persistHistory();
   }, [copy.historySaveFailed, jobState, prompt, refreshHistory, selectedModel]);
 
+  function resetActiveJob() {
+    activeJobIdRef.current = null;
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (copiedTimerRef.current) {
+      window.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = null;
+    }
+    setJobId(null);
+    setJobState(null);
+    setError('');
+    setCopied(false);
+    setClosing(false);
+  }
+
   async function submitWithToken(token: string) {
     setError('');
     setSubmitting(true);
@@ -300,7 +329,12 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
       if (!response.ok) {
         throw new Error(data.error || 'database_unavailable');
       }
-      setJobId(data.id);
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+      activeJobIdRef.current = null;
+      setClosing(true);
+      setJobId(null);
       setJobState(null);
       submittedJobs.current.set(data.id, {
         prompt,
@@ -309,10 +343,20 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
         quality,
         aspectRatio,
       });
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const closeDelay = reducedMotion ? 0 : 360;
+      closeTimerRef.current = window.setTimeout(() => {
+        activeJobIdRef.current = data.id;
+        setJobId(data.id);
+        setClosing(false);
+        closeTimerRef.current = null;
+      }, closeDelay);
       setCaptchaOpen(false);
     } catch (err) {
       const code = err instanceof Error ? err.message : 'database_unavailable';
       setError(errorMessage(copy, code));
+      activeJobIdRef.current = null;
+      setClosing(false);
     } finally {
       setSubmitting(false);
       setCaptchaToken('');
@@ -336,8 +380,14 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
     const url = jobState?.job.resultUrl;
     if (!url) return;
     await navigator.clipboard.writeText(url);
+    if (copiedTimerRef.current) {
+      window.clearTimeout(copiedTimerRef.current);
+    }
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    copiedTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copiedTimerRef.current = null;
+    }, 1600);
   }
 
   function reuseHistory(item: HistoryItem) {
@@ -368,104 +418,200 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
 
   const countdown = now ? formatCountdown(jobState?.job.expiresAt || null, now) : '';
   const visibleHistory = historyExpanded ? history : history.slice(0, 4);
+  const queueRank = jobState?.queue.queuePosition;
+  const generationStatus = jobState?.job.status;
+  const generationError =
+    jobState?.job.errorMessage ||
+    (jobState?.job.errorCode ? errorMessage(copy, jobState.job.errorCode) : copy.providerFailed);
+  const generationTitle =
+    generationStatus === 'queued'
+      ? copy.queueWaitingTitle
+      : generationStatus === 'running'
+        ? copy.generatingTitle
+        : generationStatus === 'succeeded'
+          ? copy.statusSucceeded
+          : generationStatus === 'failed'
+            ? copy.statusFailed
+            : generationStatus === 'expired'
+              ? copy.statusExpired
+              : copy.startingTitle;
+  const showGenerationStage = Boolean(jobId);
 
   return (
     <main className="workspace">
       <section className="hero-workspace" id="generator">
-        <div className="intro">
-          <p className="eyebrow">AI Image Queue</p>
-          <h1>{copy.title}</h1>
-          <p>{copy.subtitle}</p>
-        </div>
+        <div className="command-hero">
+          <div className="command-copy">
+            <p className="eyebrow">AI Image Queue</p>
+            <h1>
+              {copy.title} {copy.freeGenerate}
+            </h1>
+            <p>{copy.heroTagline}</p>
+          </div>
 
-        <section className="tool-grid">
           <form
-            className="panel generator-panel"
+            className="command-form"
             onSubmit={(event) => {
               event.preventDefault();
               requestSubmit();
             }}
           >
-            <label className="field prompt-field">
-              <span>{copy.promptLabel}</span>
-              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={copy.promptPlaceholder} rows={3} maxLength={4000} />
-            </label>
-
-            <div className="model-list" role="radiogroup" aria-label={copy.modelLabel}>
-              {models.length ? (
-                models.map((model) => (
-                  <button
-                    key={model.id}
-                    type="button"
-                    className={`model-chip${modelId === model.id ? ' active' : ''}`}
-                    onClick={() => setModelId(model.id)}
-                    aria-pressed={modelId === model.id}
-                  >
-                    <span className={`model-icon ${model.icon}`}>{iconLabel(model.icon)}</span>
-                    <span>{model.name}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="notice error">{copy.modelMissing}</div>
-              )}
-            </div>
-
-            <div className="option-row">
-              <div>
-                <span className="option-label">{copy.qualityLabel}</span>
-                <div className="segmented">
-                  {IMAGE_QUALITIES.map((item) => (
-                    <button key={item} type="button" className={quality === item ? 'active' : ''} onClick={() => setQuality(item)}>
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <span className="option-label">{copy.aspectRatioLabel}</span>
-                <div className="segmented">
-                  {IMAGE_ASPECT_RATIOS.map((item) => (
-                    <button key={item} type="button" className={aspectRatio === item ? 'active' : ''} onClick={() => setAspectRatio(item)}>
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {config?.priorityQueueEnabled ? (
-              <label className="priority-toggle">
-                <input
-                  type="checkbox"
-                  checked={usePriority}
-                  onChange={(event) => setUsePriority(event.target.checked)}
-                  disabled={(config.priorityRemaining || 0) <= 0}
-                />
-                <span>
-                  {copy.priorityLabel}
-                  <small>{copy.priorityHint.replace('{count}', String(config.priorityRemaining || 0))}</small>
-                </span>
+            <div className={`prompt-command-bar${closing ? ' closing' : ''}`}>
+              <label className="sr-only" htmlFor="prompt-command-input">
+                {copy.promptLabel}
               </label>
-            ) : null}
+              <input
+                id="prompt-command-input"
+                className="prompt-command-input"
+                type="text"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder={copy.promptBarPlaceholder}
+                maxLength={4000}
+                disabled={closing}
+              />
+              <div className="command-selects">
+                <label className="sr-only" htmlFor="quality-command-select">
+                  {copy.qualityLabel}
+                </label>
+                <select
+                  id="quality-command-select"
+                  value={quality}
+                  onChange={(event) => setQuality(event.target.value as ImageQuality)}
+                  aria-label={copy.qualityLabel}
+                  disabled={closing}
+                >
+                  {IMAGE_QUALITIES.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+                <label className="sr-only" htmlFor="aspect-command-select">
+                  {copy.aspectRatioLabel}
+                </label>
+                <select
+                  id="aspect-command-select"
+                  value={aspectRatio}
+                  onChange={(event) => setAspectRatio(event.target.value as ImageAspectRatio)}
+                  aria-label={copy.aspectRatioLabel}
+                  disabled={closing}
+                >
+                  {IMAGE_ASPECT_RATIOS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button className="primary-button command-submit" type="submit" disabled={submitting || closing || !prompt.trim() || !models.length}>
+                {submitting ? copy.submitting : copy.submit}
+              </button>
+            </div>
 
-            {error ? <div className="notice error">{error}</div> : null}
+            <div className="secondary-controls">
+              {models.length > 1 ? (
+                <div className="model-list compact" role="radiogroup" aria-label={copy.modelLabel}>
+                  {models.map((model) => (
+                    <label key={model.id} className={`model-chip${modelId === model.id ? ' active' : ''}`}>
+                      <input
+                        className="sr-only"
+                        type="radio"
+                        name="image-model"
+                        value={model.id}
+                        checked={modelId === model.id}
+                        onChange={() => setModelId(model.id)}
+                        disabled={closing}
+                      />
+                      <span className={`model-icon ${model.icon}`}>{iconLabel(model.icon)}</span>
+                      <span>{model.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : models.length === 1 && selectedModel ? (
+                <div className="selected-model-label" aria-label={copy.modelLabel}>
+                  <span className={`model-icon ${selectedModel.icon}`}>{iconLabel(selectedModel.icon)}</span>
+                  <span>{selectedModel.name}</span>
+                </div>
+              ) : (
+                <div className="notice error compact-notice">{copy.modelMissing}</div>
+              )}
 
-            <button className="primary-button" type="submit" disabled={submitting || !prompt.trim() || !models.length}>
-              {submitting ? copy.submitting : copy.submit}
-            </button>
+              {config?.priorityQueueEnabled ? (
+                <label className="priority-toggle compact">
+                  <input
+                    type="checkbox"
+                    checked={usePriority}
+                    onChange={(event) => setUsePriority(event.target.checked)}
+                    disabled={closing || (config.priorityRemaining || 0) <= 0}
+                  />
+                  <span>
+                    {copy.priorityLabel}
+                    <small>{copy.priorityHint.replace('{count}', String(config.priorityRemaining || 0))}</small>
+                  </span>
+                </label>
+              ) : null}
+            </div>
+
+            {error ? <div className="notice error command-error">{error}</div> : null}
           </form>
 
-          <aside className="panel status-panel">
-            <div className="panel-heading">
-              <p className="eyebrow">{copy.queueTitle}</p>
-              <h2>{jobState ? copy[STATUS_LABELS[jobState.job.status]] : copy.idleTitle}</h2>
-            </div>
+          {showGenerationStage ? (
+            <section className="panel generation-stage" aria-live="polite">
+              <div className="generation-stage-main">
+                <p className="eyebrow">{copy.queueTitle}</p>
+                <h2>{generationTitle}</h2>
 
-            {!jobState ? (
-              <p className="muted">{copy.idleDescription}</p>
-            ) : (
-              <>
-                <div className="metrics-grid">
+                {generationStatus === 'queued' ? (
+                  queueRank ? <p className="generation-status-copy">{copy.queueRankText.replace('{rank}', String(queueRank))}</p> : null
+                ) : null}
+
+                {generationStatus === 'running' ? (
+                  <div className="generation-running">
+                    <GenerationLoader className="status-loader" />
+                    <p className="generation-status-copy">{copy.generatingHint}</p>
+                  </div>
+                ) : null}
+
+                {generationStatus === 'succeeded' && resultSrc ? (
+                  <div className="result-block generation-result">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={resultSrc} alt={copy.resultAlt} />
+                    {countdown ? <div className="notice ttl">{copy.ttlNotice.replace('{time}', countdown)}</div> : null}
+                    <div className="result-actions">
+                      <a className="secondary-button" href={resultSrc} download>
+                        {copy.download}
+                      </a>
+                      {jobState?.job.resultUrl ? (
+                        <button className="secondary-button" type="button" onClick={copyResultUrl}>
+                          {copied ? copy.copied : copy.copyUrl}
+                        </button>
+                      ) : null}
+                      <button className="primary-button compact" type="button" onClick={resetActiveJob}>
+                        {copy.again}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {generationStatus === 'failed' || generationStatus === 'expired' ? (
+                  <>
+                    <div className="notice error">{generationError}</div>
+                    <button className="primary-button compact" type="button" onClick={resetActiveJob}>
+                      {copy.again}
+                    </button>
+                  </>
+                ) : null}
+
+                {(generationStatus === 'queued' || generationStatus === 'running' || !jobState) && (
+                  <button className="ghost-button generation-reset" type="button" onClick={resetActiveJob}>
+                    {copy.again}
+                  </button>
+                )}
+              </div>
+
+              {jobState ? (
+                <div className="metrics-grid generation-metrics" aria-label={copy.queueTitle}>
                   <div>
                     <span>{copy.queuePosition}</span>
                     <strong>{jobState.queue.queuePosition ?? '-'}</strong>
@@ -479,45 +625,10 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
                     <strong>{jobState.queue.waitingCount}</strong>
                   </div>
                 </div>
-
-                {countdown ? <div className="notice ttl">{copy.ttlNotice.replace('{time}', countdown)}</div> : null}
-
-                {jobState.job.status === 'failed' || jobState.job.status === 'expired' ? (
-                  <div className="notice error">{jobState.job.errorMessage || copy.providerFailed}</div>
-                ) : null}
-
-                {resultSrc ? (
-                  <div className="result-block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={resultSrc} alt={copy.resultAlt} />
-                    <div className="result-actions">
-                      <a className="secondary-button" href={resultSrc} download>
-                        {copy.download}
-                      </a>
-                      {jobState.job.resultUrl ? (
-                        <button className="secondary-button" type="button" onClick={copyResultUrl}>
-                          {copied ? copy.copied : copy.copyUrl}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => {
-                    setJobId(null);
-                    setJobState(null);
-                    setError('');
-                  }}
-                >
-                  {copy.again}
-                </button>
-              </>
-            )}
-          </aside>
-        </section>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
       </section>
 
       <section className="history-section" id="history">

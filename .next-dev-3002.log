@@ -1,0 +1,15 @@
+
+> aivro-free-edge-queue-image@0.1.0 dev
+> next dev --port 3002
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3002
+- Network:       http://198.18.0.1:3002
+- Environments: .env.local
+✓ Ready in 1346ms
+
+ GET /api/models 200 in 3.0s (next.js: 1465ms, proxy.ts: 1466ms, application-code: 61ms)
+ GET /zh-CN 200 in 3.7s (next.js: 1797ms, proxy.ts: 1456ms, generate-params: 1415ms, application-code: 438ms)
+ POST /api/jobs 503 in 1042ms (next.js: 972ms, proxy.ts: 25ms, application-code: 45ms)
+ POST /api/jobs 503 in 54ms (next.js: 12ms, proxy.ts: 20ms, application-code: 22ms)
+ GET /zh-CN 200 in 733ms (next.js: 276ms, proxy.ts: 82ms, generate-params: 119ms, application-code: 374ms)

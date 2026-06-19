@@ -1,5 +1,59 @@
-export const SITE_URL = 'https://aivro.org';
+export const SITE_URL = 'https://edge.aivro.org';
 export const SITE_NAME = 'Aivro';
+
+// Shared product surfaces used by the top navigation.
+export const PRODUCT_BASE = 'https://aivro.org';
+export const EDGE_IMAGE_URL = 'https://edge.aivro.org';
+export const INSIGHT_URL = 'https://insight.aivro.org';
+
+export type NavLink = {
+  label: string;
+  href: string;
+  active?: boolean;
+};
+
+export const NAV_LINKS: Record<SiteLocale, NavLink[]> = {
+  'en-US': [
+    { label: 'Workflow', href: `${PRODUCT_BASE}/canvas` },
+    { label: 'Image Studio', href: `${PRODUCT_BASE}/image` },
+    { label: 'Video Studio', href: `${PRODUCT_BASE}/video` },
+    { label: 'Model Studio', href: `${PRODUCT_BASE}/to-3d` },
+    { label: 'Prompt Library', href: `${PRODUCT_BASE}/prompts` },
+    { label: 'My Assets', href: `${PRODUCT_BASE}/assets` },
+    { label: 'Free Image Generation', href: EDGE_IMAGE_URL, active: true },
+    { label: 'Prompt Reverse', href: `${INSIGHT_URL}` },
+  ],
+  'zh-CN': [
+    { label: '工作流', href: `${PRODUCT_BASE}/canvas` },
+    { label: '生图工作台', href: `${PRODUCT_BASE}/image` },
+    { label: '视频创作台', href: `${PRODUCT_BASE}/video` },
+    { label: '模型工作台', href: `${PRODUCT_BASE}/to-3d` },
+    { label: '提示词库', href: `${PRODUCT_BASE}/prompts` },
+    { label: '我的素材', href: `${PRODUCT_BASE}/assets` },
+    { label: '免费生成图片', href: EDGE_IMAGE_URL, active: true },
+    { label: '提示词反推', href: `${INSIGHT_URL}` },
+  ],
+  'zh-TW': [
+    { label: '工作流', href: `${PRODUCT_BASE}/canvas` },
+    { label: '生圖工作台', href: `${PRODUCT_BASE}/image` },
+    { label: '影片創作台', href: `${PRODUCT_BASE}/video` },
+    { label: '模型工作台', href: `${PRODUCT_BASE}/to-3d` },
+    { label: '提示詞庫', href: `${PRODUCT_BASE}/prompts` },
+    { label: '我的素材', href: `${PRODUCT_BASE}/assets` },
+    { label: '免費生成圖片', href: EDGE_IMAGE_URL, active: true },
+    { label: '提示詞反推', href: `${INSIGHT_URL}` },
+  ],
+  ja: [
+    { label: 'ワークフロー', href: `${PRODUCT_BASE}/canvas` },
+    { label: '画像スタジオ', href: `${PRODUCT_BASE}/image` },
+    { label: '動画スタジオ', href: `${PRODUCT_BASE}/video` },
+    { label: 'モデルスタジオ', href: `${PRODUCT_BASE}/to-3d` },
+    { label: 'プロンプト集', href: `${PRODUCT_BASE}/prompts` },
+    { label: 'マイ素材', href: `${PRODUCT_BASE}/assets` },
+    { label: '無料画像生成', href: EDGE_IMAGE_URL, active: true },
+    { label: 'プロンプト解析', href: `${INSIGHT_URL}` },
+  ],
+};
 
 export const LOCALES = ['en-US', 'zh-CN', 'zh-TW', 'ja'] as const;
 export const DEFAULT_LOCALE: SiteLocale = 'en-US';
@@ -70,6 +124,15 @@ type FaqCopy = {
 export type LocaleCopy = {
   title: string;
   subtitle: string;
+  freeGenerate: string;
+  heroTagline: string;
+  promptBarPlaceholder: string;
+  generatingTitle: string;
+  generatingHint: string;
+  queueWaitingTitle: string;
+  queueRankText: string;
+  startingTitle: string;
+  navMenu: string;
   promptLabel: string;
   promptPlaceholder: string;
   modelLabel: string;
@@ -146,6 +209,15 @@ const enUS: LocaleCopy = {
   title: SITE_NAME,
   subtitle:
     'Enter a prompt, choose a model, quality, and aspect ratio, then generate images through a shared queue. Results are temporarily stored in the database and saved to your browser history until you delete them.',
+  freeGenerate: 'Free image generation',
+  heroTagline: 'Type a prompt, send it through the shared queue, and watch your image come to life.',
+  promptBarPlaceholder: 'Describe the image you want to create...',
+  generatingTitle: 'Generating your image',
+  generatingHint: 'The model is painting your prompt. This usually takes a few seconds.',
+  queueWaitingTitle: 'Waiting in queue',
+  queueRankText: 'Your position: #{rank}',
+  startingTitle: 'Preparing your request',
+  navMenu: 'Menu',
   promptLabel: 'Prompt',
   promptPlaceholder: 'Describe the image you want, for example: a futuristic city on a rainy night, neon reflections on glass towers, cinematic composition.',
   modelLabel: 'Model',
@@ -239,6 +311,15 @@ const enUS: LocaleCopy = {
 const zhCN: LocaleCopy = {
   title: SITE_NAME,
   subtitle: '输入提示词，选择模型、质量和比例，通过共享队列生成图片。结果会临时保存在数据库，同时永久缓存到你的浏览器历史中，直到你手动删除。',
+  freeGenerate: '免费生成图片',
+  heroTagline: '输入提示词，通过共享队列发送，实时见证你的图片诞生。',
+  promptBarPlaceholder: '描述你想要生成的图片...',
+  generatingTitle: '正在为你生成图片',
+  generatingHint: '模型正在绘制你的提示词，通常只需几秒钟。',
+  queueWaitingTitle: '正在排队中',
+  queueRankText: '当前排名：第 {rank} 位',
+  startingTitle: '正在准备你的请求',
+  navMenu: '菜单',
   promptLabel: '提示词',
   promptPlaceholder: '描述你想生成的图片，例如：一座雨夜里的未来城市，霓虹反射在玻璃幕墙上，电影感构图。',
   modelLabel: '模型',
@@ -332,6 +413,15 @@ const zhCN: LocaleCopy = {
 const zhTW: LocaleCopy = {
   ...zhCN,
   subtitle: '輸入提示詞，選擇模型、品質和比例，透過共享佇列生成圖片。結果會暫時保存在資料庫，同時永久快取到你的瀏覽器歷史中，直到你手動刪除。',
+  freeGenerate: '免費生成圖片',
+  heroTagline: '輸入提示詞，透過共享佇列發送，即時見證你的圖片誕生。',
+  promptBarPlaceholder: '描述你想要生成的圖片...',
+  generatingTitle: '正在為你生成圖片',
+  generatingHint: '模型正在繪製你的提示詞，通常只需幾秒鐘。',
+  queueWaitingTitle: '正在排隊中',
+  queueRankText: '目前排名：第 {rank} 位',
+  startingTitle: '正在準備你的請求',
+  navMenu: '選單',
   promptLabel: '提示詞',
   promptPlaceholder: '描述你想生成的圖片，例如：一座雨夜裡的未來城市，霓虹反射在玻璃帷幕上，電影感構圖。',
   qualityLabel: '品質',
@@ -416,6 +506,15 @@ const ja: LocaleCopy = {
   ...enUS,
   subtitle:
     'プロンプトを入力し、モデル、品質、比率を選んで、共有キューで画像を生成します。結果は一時的にデータベースに保存され、削除するまでブラウザ履歴にも保存されます。',
+  freeGenerate: '無料画像生成',
+  heroTagline: 'プロンプトを入力し、共有キューで送信して、画像が生まれる瞬間を見届けましょう。',
+  promptBarPlaceholder: '生成したい画像を説明してください...',
+  generatingTitle: '画像を生成しています',
+  generatingHint: 'モデルがプロンプトを描いています。通常は数秒で完了します。',
+  queueWaitingTitle: 'キューで待機中',
+  queueRankText: '現在の順位：{rank} 番目',
+  startingTitle: 'リクエストを準備しています',
+  navMenu: 'メニュー',
   promptLabel: 'プロンプト',
   promptPlaceholder: '生成したい画像を説明してください。例：雨の夜の未来都市、ガラスの高層ビルに反射するネオン、映画的な構図。',
   modelLabel: 'モデル',

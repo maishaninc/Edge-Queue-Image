@@ -5,6 +5,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
 import {
   LOCALES,
+  NAV_LINKS,
   OG_LOCALE_BY_LOCALE,
   COPY,
   SEO_COPY,
@@ -74,6 +75,18 @@ export default async function LocalePage({ params }: PageProps) {
             <span className="brand-mark" aria-hidden="true" />
             <span>{SITE_NAME}</span>
           </a>
+          <nav className="product-nav" aria-label={copy.navMenu}>
+            {NAV_LINKS[siteLocale].map((link) => (
+              <a
+                key={link.href}
+                href={link.active ? relativeLocalePath(siteLocale) : link.href}
+                className={link.active ? 'active' : undefined}
+                aria-current={link.active ? 'page' : undefined}
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
           <div className="nav-actions">
             <LanguageSwitcher currentLocale={siteLocale} />
             <ThemeToggle />
