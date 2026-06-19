@@ -267,7 +267,7 @@ a {
   display: grid;
   justify-items: center;
   gap: 18px;
-  padding-top: 0;
+  padding-top: 3vh;
 }
 
 .command-hero.generating {
@@ -305,19 +305,19 @@ a {
 }
 
 .command-form {
-  width: min(100%, 1120px);
+  width: min(100%, 100vw - 48px);
   display: grid;
-  gap: 12px;
+  gap: 0;
+  justify-items: center;
+  margin-top: 18px;
 }
 
 .prompt-command-bar {
   position: relative;
   overflow: hidden;
   width: 100%;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px;
+  display: block;
+  padding: 10px 12px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.94);
@@ -375,7 +375,7 @@ a {
   min-width: 0;
   min-height: 38px;
   max-height: 220px;
-  flex: 1 1 420px;
+  width: 100%;
   border: 0;
   background: transparent;
   color: var(--foreground);
@@ -393,13 +393,30 @@ a {
 }
 
 .command-controls {
-  flex: 0 1 auto;
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  max-width: min(100%, 860px);
+  min-height: 44px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 8px;
   min-width: 0;
+  margin: -1px auto 0;
+  padding: 7px 9px 9px;
+  border: 1px solid var(--border);
+  border-top-color: rgba(231, 229, 228, 0.72);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 44px rgba(28, 25, 23, 0.07);
+}
+
+[data-theme="dark"] .command-controls {
+  border-top-color: rgba(68, 64, 60, 0.72);
+  background: rgba(28, 25, 23, 0.94);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
 }
 
 .command-controls select {
@@ -525,13 +542,6 @@ a {
   max-width: 168px;
   flex: 0 0 auto;
   font-size: 13px;
-}
-
-.model-submit-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
 }
 
 .priority-toggle.compact {
@@ -1334,20 +1344,19 @@ select:focus,
   }
 
   .prompt-command-bar {
-    flex-wrap: wrap;
-    align-items: stretch;
+    padding-bottom: 14px;
   }
 
   .prompt-command-input {
-    flex-basis: 100%;
     height: 42px;
   }
 
   .command-controls {
-    flex: 1 1 100%;
+    width: min(100%, 520px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     min-width: 0;
+    justify-content: center;
   }
 
   .command-controls select,
@@ -1360,14 +1369,8 @@ select:focus,
     max-width: none;
   }
 
-  .model-submit-group {
-    grid-column: 1 / -1;
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
   .command-submit {
+    grid-column: 1 / -1;
     min-width: 96px;
   }
 
