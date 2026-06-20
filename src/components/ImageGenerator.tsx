@@ -7,7 +7,7 @@ import GenerationLoader from './GenerationLoader';
 import type { CaptchaProvider } from '@/lib/config';
 import { COPY, type SiteLocale } from '@/lib/i18n';
 import { IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
-import { PROMPT_GALLERY_ITEMS, proxiedGithubImageUrl, type PromptGalleryItem } from '@/lib/prompt-gallery';
+import { PROMPT_GALLERY_ITEMS, proxiedGithubImageUrl, rawGithubToJsdelivr, type PromptGalleryItem } from '@/lib/prompt-gallery';
 import {
   base64ToBlob,
   clearHistoryItems,
@@ -169,7 +169,13 @@ function PromptGallery({ locale, proxyEnabled, leaving, onCite }: { locale: Site
 
   function imgSrc(url: string) { return proxiedGithubImageUrl(url, shouldProxy); }
   function imgFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-    const el = e.currentTarget; el.onerror = null; el.src = proxiedGithubImageUrl(el.src, true);
+    const el = e.currentTarget;
+    el.onerror = null;
+    // Strip proxy prefix to recover the raw GitHub URL, then try jsDelivr
+    let rawUrl = el.src;
+    if (rawUrl.startsWith('https://gh-proxy.com/')) rawUrl = rawUrl.slice('https://gh-proxy.com/'.length);
+    const jsdelivr = rawGithubToJsdelivr(rawUrl);
+    if (jsdelivr && el.src !== jsdelivr) el.src = jsdelivr;
   }
 
   return (
@@ -178,7 +184,6 @@ function PromptGallery({ locale, proxyEnabled, leaving, onCite }: { locale: Site
         <p className="eyebrow">{heading.eyebrow}</p>
         <h1>{heading.title}</h1>
         <p>{heading.description}</p>
-        <a className="secondary-button gallery-more" href="https://github.com/YouMind-OpenLab/awesome-gpt-image-2" target="_blank" rel="noopener noreferrer">{heading.more}</a>
       </div>
       <div className="gallery-viewport">
         {rows.map((rowItems, rowIndex) => (

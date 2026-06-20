@@ -5,6 +5,7 @@ export type ImageModelConfig = {
   name: string;
   api: string;
   key: string;
+  dailyLimit?: number;
 };
 
 export type PublicModel = {

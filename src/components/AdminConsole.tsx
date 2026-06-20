@@ -7,6 +7,7 @@ type AdminModel = {
   name: string;
   api: string;
   key: string;
+  dailyLimit: number;
 };
 
 type AdminSettings = {
@@ -39,7 +40,7 @@ type AdminConsoleProps = {
 };
 
 const emptySettings: AdminSettings = {
-  models: [{ id: 'default', name: '', api: '', key: '' }],
+  models: [{ id: 'default', name: '', api: '', key: '', dailyLimit: 0 }],
   queue: {
     concurrency: 1,
     maxWaiting: 200,
@@ -118,7 +119,14 @@ function displayField(field: string) {
 export default function AdminConsole({ configured, initialAuthenticated, initialSettings }: AdminConsoleProps) {
   const [authenticated, setAuthenticated] = useState(initialAuthenticated);
   const [password, setPassword] = useState('');
-  const [settings, setSettings] = useState<AdminSettings>(initialSettings || emptySettings);
+  const [settings, setSettings] = useState<AdminSettings>(
+    initialSettings
+      ? {
+          ...initialSettings,
+          models: initialSettings.models.map((m) => ({ ...m, dailyLimit: (m as AdminModel).dailyLimit ?? 0 })),
+        }
+      : emptySettings,
+  );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -199,7 +207,7 @@ export default function AdminConsole({ configured, initialAuthenticated, initial
   function addModel() {
     setSettings((current) => ({
       ...current,
-      models: [...current.models, { id: String(current.models.length), name: '', api: '', key: '' }],
+      models: [...current.models, { id: String(current.models.length), name: '', api: '', key: '', dailyLimit: 0 }],
     }));
   }
 
@@ -272,6 +280,17 @@ export default function AdminConsole({ configured, initialAuthenticated, initial
               <label>
                 API 密钥
                 <input value={model.key} onChange={(event) => updateModel(index, 'key', event.target.value)} type="password" autoComplete="off" />
+              </label>
+              <label>
+                每日上限
+                <input
+                  type="number"
+                  min={0}
+                  value={model.dailyLimit}
+                  placeholder="0=不限"
+                  title="0 表示不限次数"
+                  onChange={(event) => updateModel(index, 'dailyLimit', event.target.value)}
+                />
               </label>
               <button className="secondary-button" type="button" onClick={() => removeModel(index)}>
                 删除

@@ -5,6 +5,7 @@ import { getClientIp, hashIpAsync } from '@/lib/request';
 import { resolveModelAsync } from '@/lib/models';
 import { areImageOptionsValid, normalizeImageOptions } from '@/lib/image-options';
 import { isJobRateLimitedForIp, recordJobSubmission } from '@/lib/security';
+import { isModelDailyLimitReached, recordModelUsage } from '@/lib/model-usage';
 
 const MAX_PROMPT_LENGTH = 4000;
 
@@ -28,7 +29,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_prompt' }, { status: 400 });
   }
 
-  if (!(await resolveModelAsync(modelId))) {
+  const model = await resolveModelAsync(modelId);
+  if (!model) {
+    return NextResponse.json({ error: 'model_not_found' }, { status: 400 });
+  }
+  if (model.dailyLimit && (await isModelDailyLimitReached(modelId, model.dailyLimit))) {
     return NextResponse.json({ error: 'model_not_found' }, { status: 400 });
   }
 
@@ -62,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: created.error }, { status });
     }
 
-    await recordJobSubmission(ipHash);
+    await Promise.all([recordJobSubmission(ipHash), recordModelUsage(modelId)]);
     return NextResponse.json({ id: created.id, isPriority: created.isPriority });
   } catch {
     return NextResponse.json({ error: 'database_unavailable' }, { status: 503 });

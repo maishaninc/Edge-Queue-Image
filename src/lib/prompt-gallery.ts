@@ -155,3 +155,11 @@ export function proxiedGithubImageUrl(url: string, enabled: boolean) {
   if (!enabled || !url.startsWith('https://raw.githubusercontent.com/')) return url;
   return `${GITHUB_PROXY_PREFIX}${url}`;
 }
+
+export function rawGithubToJsdelivr(url: string): string | null {
+  const prefix = 'https://raw.githubusercontent.com/';
+  if (!url.startsWith(prefix)) return null;
+  const [owner, repo, branch, ...rest] = url.slice(prefix.length).split('/');
+  if (!owner || !repo || !branch || !rest.length) return null;
+  return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${rest.join('/')}`;
+}

@@ -31,6 +31,7 @@ export type AdminModelInput = {
   name?: string;
   api?: string;
   key?: string;
+  dailyLimit?: unknown;
 };
 
 export type AdminSettingsInput = {
@@ -165,14 +166,18 @@ export function parseModelsJson(value: string | undefined, fallback: ImageModelC
     if (!Array.isArray(parsed)) return fallback;
 
     const models = parsed
-      .map((model, index) => ({
-        id: String(model.id || (index === 0 ? 'default' : index)),
-        name: String(model.name || '').trim(),
-        key: String(model.key || '').trim(),
-        api: String(model.api || '')
-          .trim()
-          .replace(/\/+$/, ''),
-      }))
+      .map((model, index) => {
+        const dailyLimit = Number.parseInt(String(model.dailyLimit ?? ''), 10);
+        return {
+          id: String(model.id || (index === 0 ? 'default' : index)),
+          name: String(model.name || '').trim(),
+          key: String(model.key || '').trim(),
+          api: String(model.api || '')
+            .trim()
+            .replace(/\/+$/, ''),
+          ...(Number.isFinite(dailyLimit) && dailyLimit >= 0 ? { dailyLimit } : {}),
+        };
+      })
       .filter((model) => model.name && model.key && model.api);
 
     return models.length ? models : fallback;
@@ -291,11 +296,14 @@ export function validateAdminSettings(input: AdminSettingsInput): SettingsValida
       errors[`models.${index}.api`] = normalizedApi.error;
     }
     if (!key) errors[`models.${index}.key`] = 'API key is required.';
+    const dailyLimitRaw = Number.parseInt(String((model as AdminModelInput).dailyLimit ?? ''), 10);
+    const dailyLimit = Number.isFinite(dailyLimitRaw) && dailyLimitRaw >= 0 ? dailyLimitRaw : 0;
     return {
       id: String(model.id || (index === 0 ? 'default' : index)),
       name,
       api,
       key,
+      ...(dailyLimit > 0 ? { dailyLimit } : {}),
     };
   });
 

@@ -238,6 +238,7 @@ a {
 }
 
 .workspace {
+  max-width: 1280px;
   margin: 0 auto;
   padding: 54px 24px 72px;
 }
@@ -299,6 +300,10 @@ a {
   margin: 0;
   font-size: clamp(28px, 4vw, 48px);
   line-height: 1.06;
+  background: linear-gradient(135deg, var(--foreground) 30%, var(--muted-foreground));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .gallery-heading p:not(.eyebrow) {
@@ -402,7 +407,7 @@ a {
 }
 
 .command-form {
-  width: min(100%, 100vw - 48px);
+  width: min(100%, 760px);
   display: grid;
   gap: 0;
   justify-items: center;
@@ -1278,7 +1283,7 @@ select:focus,
 
 .admin-model-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(200px, 1.4fr) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(140px, 1fr) minmax(200px, 1.4fr) minmax(180px, 1fr) minmax(90px, 0.4fr) auto;
   gap: 12px;
   align-items: end;
   padding-bottom: 12px;
@@ -1337,6 +1342,10 @@ select:focus,
   margin: 0;
   font-size: 32px;
   letter-spacing: 0;
+  background: linear-gradient(135deg, var(--foreground) 40%, var(--muted-foreground));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .section-heading p:not(.eyebrow) {

@@ -78,6 +78,12 @@ export async function ensureSchema(db = getDb()) {
           used_count INTEGER NOT NULL DEFAULT 0,
           PRIMARY KEY (ip_hash, usage_date)
         )`,
+        `CREATE TABLE IF NOT EXISTS model_daily_usage (
+          model_id TEXT NOT NULL,
+          usage_date TEXT NOT NULL,
+          used_count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (model_id, usage_date)
+        )`,
       ],
       'write',
     );
