@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sortQueuedJobsForDisplay } from '../src/lib/queue';
+import { safeProviderErrorCode, sortQueuedJobsForDisplay } from '../src/lib/queue';
 
 test('keeps normal fifo order when no priority jobs exist', () => {
   const sorted = sortQueuedJobsForDisplay(
@@ -53,4 +53,10 @@ test('does not allow priority jobs inside the configured protected window', () =
   assert.equal(sorted[49].id, 'n50');
   assert.equal(sorted[50].id, 'priority');
   assert.equal(sorted[51].id, 'n51');
+});
+
+test('normalizes provider error codes for diagnostics', () => {
+  assert.equal(safeProviderErrorCode(new Error('Rate limit exceeded')), 'rate_limit_exceeded');
+  assert.equal(safeProviderErrorCode(new Error('provider_http_429')), 'provider_http_429');
+  assert.equal(safeProviderErrorCode(new Error('')), 'provider_failed');
 });

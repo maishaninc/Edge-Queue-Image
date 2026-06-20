@@ -1,9 +1,9 @@
 import type { Client } from '@libsql/client';
-import { getQueueConfig } from './config';
+import { getQueueRuntimeConfig } from './config';
 import { ensureSchema, getDb } from './db';
 import { generateImage } from './image-provider';
 import type { ImageAspectRatio, ImageQuality } from './image-options';
-import { resolveModel } from './models';
+import { resolveModelAsync } from './models';
 import { todayUtc } from './request';
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'expired';
@@ -70,7 +70,7 @@ function rowToJob(row: Record<string, unknown>): QueueJob {
 
 export async function getPriorityRemaining(ipHash: string, db = getDb()) {
   await ensureSchema(db);
-  const { priorityDailyLimit, priorityQueueEnabled } = getQueueConfig();
+  const { priorityDailyLimit, priorityQueueEnabled } = await getQueueRuntimeConfig();
   if (!priorityQueueEnabled) return 0;
 
   const result = await db.execute({
@@ -108,7 +108,7 @@ export async function createJob(input: {
   const db = getDb();
   await ensureSchema(db);
   await cleanupExpiredJobs(db);
-  const config = getQueueConfig();
+  const config = await getQueueRuntimeConfig();
 
   const waitingResult = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE status = 'queued'");
   const waitingCount = Number(waitingResult.rows[0]?.count || 0);
@@ -152,19 +152,31 @@ export async function cleanupExpiredJobs(db = getDb()) {
   });
 }
 
-function resultExpiresAt(now = new Date()) {
-  return new Date(now.getTime() + getQueueConfig().jobResultTtlMinutes * 60 * 1000).toISOString();
+async function resultExpiresAt(now = new Date()) {
+  return new Date(now.getTime() + (await getQueueRuntimeConfig()).jobResultTtlMinutes * 60 * 1000).toISOString();
+}
+
+export function safeProviderErrorCode(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error || 'provider_failed');
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_:-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return normalized.slice(0, 120) || 'provider_failed';
 }
 
 export async function releaseExpiredRunningJobs(db = getDb()) {
   await ensureSchema(db);
-  const cutoff = new Date(Date.now() - getQueueConfig().runningJobTimeoutSeconds * 1000).toISOString();
+  const config = await getQueueRuntimeConfig();
+  const cutoff = new Date(Date.now() - config.runningJobTimeoutSeconds * 1000).toISOString();
   const now = new Date();
   await db.execute({
     sql: `UPDATE jobs
       SET status = 'expired', finished_at = ?, expires_at = ?, error_code = 'job_timeout', error_message_safe = 'Generation timed out.'
       WHERE status = 'running' AND started_at < ?`,
-    args: [now.toISOString(), resultExpiresAt(now), cutoff],
+    args: [now.toISOString(), await resultExpiresAt(now), cutoff],
   });
 }
 
@@ -187,7 +199,7 @@ export async function getQueueSnapshot(jobId: string, db = getDb()): Promise<Que
     getQueuedJobs(db),
   ]);
 
-  const sorted = sortQueuedJobsForDisplay(queuedJobs, getQueueConfig().concurrency);
+  const sorted = sortQueuedJobsForDisplay(queuedJobs, (await getQueueRuntimeConfig()).concurrency);
   const index = sorted.findIndex((job) => job.id === jobId);
 
   return {
@@ -209,7 +221,7 @@ export async function getJob(id: string, db = getDb()) {
 
 export async function claimNextJob(db = getDb()) {
   await ensureSchema(db);
-  const config = getQueueConfig();
+  const config = await getQueueRuntimeConfig();
   const transaction = await db.transaction('write');
 
   try {
@@ -252,7 +264,7 @@ export async function claimNextJob(db = getDb()) {
 }
 
 export async function runClaimedJob(job: QueueJob, db = getDb()) {
-  const model = resolveModel(job.model_id);
+  const model = await resolveModelAsync(job.model_id);
   if (!model) {
     await db.execute({
       sql: `UPDATE jobs SET status = 'failed', finished_at = ?, error_code = 'model_not_found', error_message_safe = ?
@@ -275,14 +287,22 @@ export async function runClaimedJob(job: QueueJob, db = getDb()) {
     await db.execute({
       sql: `UPDATE jobs SET status = 'succeeded', finished_at = ?, expires_at = ?, result_url = ?, result_b64 = ?
         WHERE id = ?`,
-      args: [now.toISOString(), resultExpiresAt(now), result.url || null, result.b64 || null, job.id],
+      args: [now.toISOString(), await resultExpiresAt(now), result.url || null, result.b64 || null, job.id],
     });
-  } catch {
+  } catch (error) {
+    const errorCode = safeProviderErrorCode(error);
+    console.error('[queue] image provider failed', {
+      jobId: job.id,
+      modelId: job.model_id,
+      errorCode,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
     const now = new Date();
     await db.execute({
-      sql: `UPDATE jobs SET status = 'failed', finished_at = ?, expires_at = ?, error_code = 'provider_failed', error_message_safe = ?
+      sql: `UPDATE jobs SET status = 'failed', finished_at = ?, expires_at = ?, error_code = ?, error_message_safe = ?
         WHERE id = ?`,
-      args: [now.toISOString(), resultExpiresAt(now), 'Image generation failed. Please try again later.', job.id],
+      args: [now.toISOString(), await resultExpiresAt(now), errorCode, 'Image generation failed. Please try again later.', job.id],
     });
   }
 }
@@ -294,7 +314,7 @@ export async function advanceQueue(limit = 1) {
   await releaseExpiredRunningJobs(db);
 
   const claimed: QueueJob[] = [];
-  const config = getQueueConfig();
+  const config = await getQueueRuntimeConfig();
   for (let index = 0; index < Math.min(limit, config.concurrency); index += 1) {
     const job = await claimNextJob(db);
     if (!job) break;

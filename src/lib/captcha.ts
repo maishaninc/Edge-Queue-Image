@@ -1,4 +1,4 @@
-import { getCaptchaProvider } from './config';
+import { getRuntimeSettings } from './settings';
 
 export type CaptchaResult = {
   ok: boolean;
@@ -60,13 +60,14 @@ async function verifyFormEndpoint(url: string, secret: string, token: string, re
 }
 
 export async function verifyCaptcha(token: string | undefined, remoteIp?: string): Promise<CaptchaResult> {
-  const provider = getCaptchaProvider();
+  const { captcha } = await getRuntimeSettings();
+  const provider = captcha.provider;
   if (provider === 'none') return { ok: true };
 
   if (provider === 'turnstile') {
     return verifyFormEndpoint(
       'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-      process.env.TURNSTILE_SECRET_KEY || '',
+      captcha.turnstileSecretKey,
       token || '',
       remoteIp,
     );
@@ -74,7 +75,7 @@ export async function verifyCaptcha(token: string | undefined, remoteIp?: string
 
   return verifyFormEndpoint(
     'https://hcaptcha.com/siteverify',
-    process.env.HCAPTCHA_SECRET_KEY || '',
+    captcha.hcaptchaSecretKey,
     token || '',
     remoteIp,
   );

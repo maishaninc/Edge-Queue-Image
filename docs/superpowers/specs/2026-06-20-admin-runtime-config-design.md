@@ -73,7 +73,7 @@ Routes:
 - `GET /api/admin/settings` returns editable settings to authenticated admins.
 - `PUT /api/admin/settings` validates and saves settings to `app_settings`.
 
-Implement the configurable admin page with a catch-all page route that compares the request path with `ADMIN_PATH`. If the path does not match, return Next.js `notFound()`. API route paths stay fixed under `/api/admin/*` and require the signed admin cookie.
+Implement the configurable admin page by having `src/proxy.ts` rewrite the configured `ADMIN_PATH` to an internal `/admin-internal` page. The internal page checks the original request path and returns Next.js `notFound()` if the path does not match. API route paths stay fixed under `/api/admin/*` and require the signed admin cookie.
 
 ## Authentication
 
@@ -83,7 +83,7 @@ Login verification uses constant-time comparison against `ADMIN_PASSWORD`. On su
 
 The session token should contain an issued-at timestamp and expire after 7 days. Requests with missing, expired, or invalid signatures are treated as unauthenticated.
 
-If `ADMIN_PATH` is missing, the catch-all admin page returns `notFound()` and admin APIs return `404`. If `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET` is missing while `ADMIN_PATH` is set, the admin page shows a disabled setup message and admin APIs return `503 admin_not_configured`. Public generation must keep working with environment fallback config.
+If `ADMIN_PATH` is missing, the internal admin page returns `notFound()` and admin APIs return `404`. If `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET` is missing while `ADMIN_PATH` is set, the admin page shows a disabled setup message and admin APIs return `503 admin_not_configured`. Public generation must keep working with environment fallback config.
 
 ## Admin UI
 

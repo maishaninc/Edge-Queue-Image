@@ -1,3 +1,5 @@
+import { getRuntimeSettings } from './settings';
+
 export type ImageModelConfig = {
   id: string;
   name: string;
@@ -54,11 +56,20 @@ export function getModelConfigs() {
   return parseModelConfigs();
 }
 
+export async function getModelConfigsAsync() {
+  return (await getRuntimeSettings()).models;
+}
+
 export function getPublicModels(models = getModelConfigs()): PublicModel[] {
   return models.map((model) => ({ id: model.id, name: model.name, icon: inferModelIcon(model.name) }));
 }
 
 export function resolveModel(modelId: string, models = getModelConfigs()) {
+  return models.find((model) => model.id === modelId);
+}
+
+export async function resolveModelAsync(modelId: string) {
+  const models = await getModelConfigsAsync();
   return models.find((model) => model.id === modelId);
 }
 

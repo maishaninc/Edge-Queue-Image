@@ -1,3 +1,6 @@
+import { getRuntimeSettings } from './settings';
+import { booleanFromEnv, getTursoConfig, integerFromEnv, isDatabaseConfigured } from './env';
+
 export type CaptchaProvider = 'none' | 'turnstile' | 'hcaptcha';
 
 export type PublicRuntimeConfig = {
@@ -9,19 +12,6 @@ export type PublicRuntimeConfig = {
   queuePollIntervalMs: number;
   jobResultTtlMinutes: number;
 };
-
-function integerFromEnv(name: string, fallback: number, min = 0) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed >= min ? parsed : fallback;
-}
-
-function booleanFromEnv(name: string, fallback: boolean) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  return ['1', 'true', 'yes', 'on'].includes(raw.toLowerCase());
-}
 
 export function getCaptchaProvider(): CaptchaProvider {
   const provider = (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase();
@@ -41,6 +31,10 @@ export function getQueueConfig() {
     priorityDailyLimit: integerFromEnv('PRIORITY_DAILY_LIMIT', 1, 0),
     jobResultTtlMinutes: integerFromEnv('JOB_RESULT_TTL_MINUTES', 15, 1),
   };
+}
+
+export async function getQueueRuntimeConfig() {
+  return (await getRuntimeSettings()).queue;
 }
 
 export function getPublicRuntimeConfig(): PublicRuntimeConfig {
@@ -64,16 +58,25 @@ export function getPublicRuntimeConfig(): PublicRuntimeConfig {
   };
 }
 
-export function getTursoConfig() {
+export async function getPublicRuntimeConfigAsync(): Promise<PublicRuntimeConfig> {
+  const settings = await getRuntimeSettings();
+  const captchaProvider = settings.captcha.provider;
+  const captchaSiteKey =
+    captchaProvider === 'turnstile'
+      ? settings.captcha.turnstileSiteKey
+      : captchaProvider === 'hcaptcha'
+        ? settings.captcha.hcaptchaSiteKey
+        : '';
+
   return {
-    url: process.env.TURSO_DATABASE_URL || '',
-    authToken: process.env.TURSO_AUTH_TOKEN || '',
+    captchaProvider,
+    captchaSiteKey,
+    priorityQueueEnabled: settings.queue.priorityQueueEnabled,
+    priorityDailyLimit: settings.queue.priorityDailyLimit,
+    priorityRemaining: 0,
+    queuePollIntervalMs: settings.queue.pollIntervalMs,
+    jobResultTtlMinutes: settings.queue.jobResultTtlMinutes,
   };
 }
 
-export function isDatabaseConfigured() {
-  const { url, authToken } = getTursoConfig();
-  if (!url) return false;
-  if (url.startsWith('file:')) return true;
-  return Boolean(authToken);
-}
+export { getTursoConfig, integerFromEnv, isDatabaseConfigured };

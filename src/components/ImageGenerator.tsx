@@ -89,6 +89,7 @@ const ERROR_MESSAGES: Record<string, StringCopyKey> = {
   database_unavailable: 'databaseUnavailable',
   provider_failed: 'providerFailed',
   job_not_found: 'jobExpired',
+  rate_limited: 'queueFull',
 };
 
 function errorMessage(copy: (typeof COPY)['zh-CN'], code: string) {

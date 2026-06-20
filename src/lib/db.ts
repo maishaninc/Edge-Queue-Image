@@ -1,5 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
-import { getTursoConfig } from './config';
+import { getTursoConfig } from './env';
 
 let client: Client | null = null;
 let schemaReady: Promise<void> | null = null;
@@ -57,6 +57,21 @@ export async function ensureSchema(db = getDb()) {
         'CREATE INDEX IF NOT EXISTS idx_jobs_status_priority_created_at ON jobs(status, is_priority, created_at)',
         'CREATE INDEX IF NOT EXISTS idx_jobs_running_started_at ON jobs(status, started_at)',
         'CREATE INDEX IF NOT EXISTS idx_jobs_expires_at ON jobs(expires_at)',
+        `CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS admin_login_attempts (
+          ip_hash TEXT PRIMARY KEY,
+          failed_count INTEGER NOT NULL DEFAULT 0,
+          last_failed_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS job_rate_limits (
+          ip_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )`,
+        'CREATE INDEX IF NOT EXISTS idx_job_rate_limits_ip_created_at ON job_rate_limits(ip_hash, created_at)',
         `CREATE TABLE IF NOT EXISTS priority_usage (
           ip_hash TEXT NOT NULL,
           usage_date TEXT NOT NULL,

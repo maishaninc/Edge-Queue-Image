@@ -1,16 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getPublicRuntimeConfig } from '@/lib/config';
+import { getPublicRuntimeConfigAsync } from '@/lib/config';
 import { cleanupExpiredJobs, getPriorityRemaining } from '@/lib/queue';
-import { getClientIp, hashIp } from '@/lib/request';
+import { getClientIp, hashIpAsync } from '@/lib/request';
 
 export async function GET(request: NextRequest) {
-  const config = getPublicRuntimeConfig();
+  const config = await getPublicRuntimeConfigAsync();
   let priorityRemaining = 0;
 
   if (config.priorityQueueEnabled) {
     try {
       await cleanupExpiredJobs();
-      priorityRemaining = await getPriorityRemaining(hashIp(getClientIp(request)));
+      priorityRemaining = await getPriorityRemaining(await hashIpAsync(getClientIp(request)));
     } catch {
       priorityRemaining = 0;
     }
