@@ -11,6 +11,7 @@ test('builds runtime settings from database values before environment fallback',
       turnstile_site_key: 'db-site',
       turnstile_secret_key: 'db-secret',
       ip_hash_salt: 'db-salt',
+      zh_cn_image_proxy_enabled: 'true',
     },
     {
       MODEL: 'env-model',
@@ -27,6 +28,7 @@ test('builds runtime settings from database values before environment fallback',
   assert.equal(settings.captcha.provider, 'turnstile');
   assert.equal(settings.captcha.turnstileSiteKey, 'db-site');
   assert.equal(settings.ipHashSalt, 'db-salt');
+  assert.equal(settings.zhCnImageProxyEnabled, true);
 });
 
 test('falls back to environment models when database model json is invalid', () => {
@@ -119,6 +121,7 @@ test('masks admin secrets for client payload and preserves unchanged secrets', (
       hcaptchaSecretKey: '',
     },
     ipHashSalt: 'salt',
+    zhCnImageProxyEnabled: false,
   };
 
   const clientPayload = adminPayloadForClient(existing);

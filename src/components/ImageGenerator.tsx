@@ -7,6 +7,7 @@ import GenerationLoader from './GenerationLoader';
 import type { CaptchaProvider } from '@/lib/config';
 import { COPY, type SiteLocale } from '@/lib/i18n';
 import { IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
+import { PROMPT_GALLERY_ITEMS, proxiedGithubImageUrl } from '@/lib/prompt-gallery';
 import {
   base64ToBlob,
   clearHistoryItems,
@@ -31,6 +32,7 @@ type RuntimeConfig = {
   priorityRemaining: number;
   queuePollIntervalMs: number;
   jobResultTtlMinutes: number;
+  zhCnImageProxyEnabled: boolean;
 };
 
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'expired';
@@ -62,6 +64,7 @@ type StringCopyKey = {
 
 const ACTIVE_JOB_STORAGE_KEY = 'aivro-active-generation-job';
 const FIXED_ASPECT_RATIO: ImageAspectRatio = '1:1';
+const HISTORY_PAGE_SIZE = 8;
 
 type SubmittedJobSnapshot = {
   prompt: string;
@@ -155,6 +158,47 @@ function readStoredActiveJob(): StoredActiveJob | null {
   }
 }
 
+function PromptGallery({ locale, proxyEnabled, leaving }: { locale: SiteLocale; proxyEnabled: boolean; leaving: boolean }) {
+  const shouldProxy = locale === 'zh-CN' && proxyEnabled;
+  const galleryItems = [...PROMPT_GALLERY_ITEMS, ...PROMPT_GALLERY_ITEMS];
+  const heading =
+    locale === 'zh-CN'
+      ? {
+          eyebrow: 'Prompt Gallery',
+          title: '最新 GPT Image 2 灵感图库',
+          description: '内置 YouMind 最大 Prompt Gallery 的最新 20 个图片参考，结合社区精选、仓库导航和 API 商业案例方向做展示。',
+        }
+      : {
+          eyebrow: 'Prompt Gallery',
+          title: 'Fresh GPT Image 2 prompt references',
+          description: 'A built-in stream of the latest 20 visual references from the YouMind prompt gallery.',
+        };
+
+  return (
+    <section className={`prompt-gallery${leaving ? ' leaving' : ''}`} aria-label={heading.title}>
+      <div className="gallery-heading">
+        <p className="eyebrow">{heading.eyebrow}</p>
+        <h1>{heading.title}</h1>
+        <p>{heading.description}</p>
+      </div>
+      <div className="gallery-viewport">
+        <div className="gallery-track">
+          {galleryItems.map((item, index) => (
+            <article className={`gallery-card ${item.aspect}`} key={`${item.id}-${index}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={proxiedGithubImageUrl(item.imageUrl, shouldProxy)} alt={item.title} loading={index < 8 ? 'eager' : 'lazy'} />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.source}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const copy = COPY[locale];
   const [initialActiveJob] = useState<StoredActiveJob | null>(() => readStoredActiveJob());
@@ -168,6 +212,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
 
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [models, setModels] = useState<PublicModel[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
   const [prompt, setPrompt] = useState(initialActiveJob?.prompt || '');
   const [modelId, setModelId] = useState(initialActiveJob?.modelId || 'default');
   const [quality, setQuality] = useState<ImageQuality>(initialActiveJob?.quality || '1K');
@@ -185,7 +230,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const [now, setNow] = useState(0);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyPreview, setHistoryPreview] = useState<{ item: HistoryItem; url: string } | null>(null);
-  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [historyPage, setHistoryPage] = useState(0);
 
   useEffect(() => {
     Promise.all([
@@ -196,11 +241,13 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
         setConfig(runtime);
         const nextModels = Array.isArray(modelData.models) ? modelData.models : [];
         setModels(nextModels);
-        if (nextModels[0]) {
-          setModelId(nextModels[0].id);
-        }
+        setModelsLoaded(true);
+        setModelId((current) => (nextModels[0] && !nextModels.some((model: PublicModel) => model.id === current) ? nextModels[0].id : current));
       })
-      .catch(() => setError(copy.databaseUnavailable));
+      .catch(() => {
+        setModelsLoaded(true);
+        setError(copy.databaseUnavailable);
+      });
   }, [copy.databaseUnavailable]);
 
   useEffect(() => {
@@ -218,7 +265,10 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   const refreshHistory = useCallback(() => {
     if (!('indexedDB' in window)) return;
     listHistoryItems()
-      .then(setHistory)
+      .then((items) => {
+        setHistory(items);
+        setHistoryPage((page) => Math.min(page, Math.max(0, Math.ceil(items.length / HISTORY_PAGE_SIZE) - 1)));
+      })
       .catch(() => setHistoryError(copy.historyUnavailable));
   }, [copy.historyUnavailable]);
 
@@ -479,7 +529,8 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
   }
 
   const countdown = now ? formatCountdown(jobState?.job.expiresAt || null, now) : '';
-  const visibleHistory = historyExpanded ? history : history.slice(0, 4);
+  const historyPageCount = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const visibleHistory = history.slice(historyPage * HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE + HISTORY_PAGE_SIZE);
   const queueRank = jobState?.queue.queuePosition;
   const generationStatus = jobState?.job.status;
   const isGeneratingView = Boolean(jobId);
@@ -504,13 +555,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
     <main className="workspace">
       <section className="hero-workspace" id="generator">
         <div className={`command-hero${isGeneratingView ? ' generating' : ''}`}>
-          <div className="command-copy">
-            <p className="eyebrow">AI Image Queue</p>
-            <h1>
-              {copy.title} {copy.freeGenerate}
-            </h1>
-            <p>{copy.heroTagline}</p>
-          </div>
+          {!isGeneratingView ? <PromptGallery locale={locale} proxyEnabled={Boolean(config?.zhCnImageProxyEnabled)} leaving={closing} /> : null}
 
           {!isGeneratingView ? (
             <form
@@ -599,8 +644,10 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
                     <ModelIcon icon={selectedModel.icon} />
                     <span>{selectedModel.name}</span>
                   </div>
-                ) : (
+                ) : modelsLoaded ? (
                   <div className="notice error compact-notice">{copy.modelMissing}</div>
+                ) : (
+                  <div className="selected-model-label inline-model skeleton-model" aria-label={copy.modelLabel} />
                 )}
 
                 <button className="primary-button command-submit" type="submit" disabled={submitting || closing || !prompt.trim() || !models.length}>
@@ -726,10 +773,23 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
               })}
             </div>
             <div className="history-toolbar">
-              {history.length > 4 ? (
-                <button className="secondary-button" type="button" onClick={() => setHistoryExpanded((value) => !value)}>
-                  {historyExpanded ? copy.collapseHistory : copy.expandHistory}
-                </button>
+              {history.length > HISTORY_PAGE_SIZE ? (
+                <div className="history-pager" aria-label={copy.historyTitle}>
+                  <button className="secondary-button" type="button" onClick={() => setHistoryPage((page) => Math.max(0, page - 1))} disabled={historyPage === 0}>
+                    上一页
+                  </button>
+                  <span>
+                    {historyPage + 1} / {historyPageCount}
+                  </span>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setHistoryPage((page) => Math.min(historyPageCount - 1, page + 1))}
+                    disabled={historyPage >= historyPageCount - 1}
+                  >
+                    下一页
+                  </button>
+                </div>
               ) : null}
               <button className="secondary-button" type="button" onClick={clearHistory}>
                 {copy.clearHistory}

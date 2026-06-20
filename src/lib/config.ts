@@ -11,6 +11,7 @@ export type PublicRuntimeConfig = {
   priorityRemaining: number;
   queuePollIntervalMs: number;
   jobResultTtlMinutes: number;
+  zhCnImageProxyEnabled: boolean;
 };
 
 export function getCaptchaProvider(): CaptchaProvider {
@@ -55,6 +56,7 @@ export function getPublicRuntimeConfig(): PublicRuntimeConfig {
     priorityRemaining: 0,
     queuePollIntervalMs: queue.pollIntervalMs,
     jobResultTtlMinutes: queue.jobResultTtlMinutes,
+    zhCnImageProxyEnabled: false,
   };
 }
 
@@ -76,6 +78,7 @@ export async function getPublicRuntimeConfigAsync(): Promise<PublicRuntimeConfig
     priorityRemaining: 0,
     queuePollIntervalMs: settings.queue.pollIntervalMs,
     jobResultTtlMinutes: settings.queue.jobResultTtlMinutes,
+    zhCnImageProxyEnabled: settings.zhCnImageProxyEnabled,
   };
 }
 

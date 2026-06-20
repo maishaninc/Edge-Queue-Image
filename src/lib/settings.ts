@@ -23,6 +23,7 @@ export type RuntimeSettings = {
     hcaptchaSecretKey: string;
   };
   ipHashSalt: string;
+  zhCnImageProxyEnabled: boolean;
 };
 
 export type AdminModelInput = {
@@ -51,6 +52,7 @@ export type AdminSettingsInput = {
     hcaptchaSecretKey?: unknown;
   };
   ipHashSalt?: unknown;
+  zhCnImageProxyEnabled?: unknown;
 };
 
 export type AdminSettingsPayload = {
@@ -58,6 +60,7 @@ export type AdminSettingsPayload = {
   queue: RuntimeSettings['queue'];
   captcha: RuntimeSettings['captcha'];
   ipHashSalt: string;
+  zhCnImageProxyEnabled: boolean;
   csrfToken?: string;
 };
 
@@ -80,6 +83,7 @@ const SETTINGS_KEYS = [
   'hcaptcha_site_key',
   'hcaptcha_secret_key',
   'ip_hash_salt',
+  'zh_cn_image_proxy_enabled',
 ] as const;
 
 type SettingsKey = (typeof SETTINGS_KEYS)[number];
@@ -204,6 +208,7 @@ export function buildRuntimeSettings(raw: RawSettings = {}, env: NodeJS.ProcessE
       hcaptchaSecretKey: raw.hcaptcha_secret_key || env.HCAPTCHA_SECRET_KEY || '',
     },
     ipHashSalt: raw.ip_hash_salt || env.IP_HASH_SALT || 'aivro-edge-queue-image',
+    zhCnImageProxyEnabled: parseBoolean(raw.zh_cn_image_proxy_enabled, booleanFromRecord(env, 'ZH_CN_IMAGE_PROXY_ENABLED', false)),
   };
 }
 
@@ -339,6 +344,7 @@ export function validateAdminSettings(input: AdminSettingsInput): SettingsValida
       hcaptchaSecretKey,
     },
     ipHashSalt: fieldString(input.ipHashSalt) || 'aivro-edge-queue-image',
+    zhCnImageProxyEnabled: Boolean(input.zhCnImageProxyEnabled),
   };
 
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, settings };
@@ -361,6 +367,7 @@ export async function saveAdminSettings(settings: AdminSettingsPayload, db: Clie
     hcaptcha_site_key: settings.captcha.hcaptchaSiteKey,
     hcaptcha_secret_key: settings.captcha.hcaptchaSecretKey,
     ip_hash_salt: settings.ipHashSalt,
+    zh_cn_image_proxy_enabled: settings.zhCnImageProxyEnabled ? 'true' : 'false',
   };
   const now = new Date().toISOString();
 
@@ -381,6 +388,7 @@ export function adminPayloadFromRuntime(settings: RuntimeSettings): AdminSetting
     queue: settings.queue,
     captcha: settings.captcha,
     ipHashSalt: settings.ipHashSalt,
+    zhCnImageProxyEnabled: settings.zhCnImageProxyEnabled,
   };
 }
 
@@ -394,6 +402,7 @@ export function adminPayloadForClient(settings: RuntimeSettings | AdminSettingsP
       hcaptchaSecretKey: maskSecret(settings.captcha.hcaptchaSecretKey),
     },
     ipHashSalt: settings.ipHashSalt,
+    zhCnImageProxyEnabled: settings.zhCnImageProxyEnabled,
     csrfToken,
   };
 }

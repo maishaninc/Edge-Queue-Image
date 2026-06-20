@@ -5,7 +5,7 @@ import { isAdminAuthenticated } from '@/lib/admin-auth';
 import { adminPayloadFromRuntime, getAdminBootstrapConfig, getRuntimeSettings } from '@/lib/settings';
 
 export const metadata = {
-  title: 'Aivro Admin',
+  title: 'Aivro 管理后台',
   robots: {
     index: false,
     follow: false,

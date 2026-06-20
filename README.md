@@ -15,6 +15,7 @@
 - 可选每日优先队列，按 IP 哈希和协调世界时日期统计次数。
 - 验证码提供商可切换为 `none`、`turnstile` 或 `hcaptcha`，前端使用弹窗验证。
 - 管理员后台支持运行时保存模型、队列、验证码和安全配置，不需要每次改 Vercel 环境变量。
+- 首页内置 GPT Image 2 Prompt Gallery 最新图片参考，支持 `/zh-CN` 中国大陆 GitHub raw 图片加速开关。
 - 支持 English、简体中文、繁體中文、日本語四种界面语言。
 
 ## 本地启动
@@ -231,6 +232,7 @@ CAPTCHA_PROVIDER=none
 - 优先队列：开关和每日次数。
 - 验证码：none、Turnstile 或 hCaptcha 及对应密钥。
 - IP 哈希盐值。
+- `/zh-CN` 中国大陆图片加速：开启后，内置 GitHub raw 图库会自动使用 `https://gh-proxy.com/` 前缀。
 
 运行时读取顺序是：后台数据库配置优先，其次环境变量，最后使用默认值。保存后下一次请求生效，不需要重新部署 Vercel。
 
@@ -243,6 +245,26 @@ CAPTCHA_PROVIDER=none
 - 后台读取配置时 API Key 和验证码 secret 会脱敏显示；保存脱敏值会保留原 secret。
 - 模型 API Base URL 必须是合法 HTTPS 地址。
 - 公开生成接口会按 IP 哈希限制提交频率，防止验证码关闭时被刷队列。
+
+### 首页 Prompt Gallery
+
+首页上半部分内置 20 张 GPT Image 2 Prompt Gallery 图片参考，当前来源以 `YouMind-OpenLab/awesome-gpt-image-2` 最新图片段落为主；`ZeroLu/awesome-gpt-image`、`itgoyo/awesome-gpt-image2`、`EvoLinkAI/awesome-gpt-image-2-API-and-Prompts` 更适合作为社区精选、仓库导航和 API/商业案例方向参考。
+
+图库不使用数据库，图片 URL 静态内置在 `src/lib/prompt-gallery.ts`。鼠标悬浮图库时，横向滚动动画会暂停。
+
+如果后台开启 `/zh-CN` 中国大陆图片加速，则 `/zh-CN` 页面中的 GitHub raw 图片会从：
+
+```text
+https://raw.githubusercontent.com/...
+```
+
+转换为：
+
+```text
+https://gh-proxy.com/https://raw.githubusercontent.com/...
+```
+
+其他语言页面不受影响。
 
 ## Vercel 部署
 
