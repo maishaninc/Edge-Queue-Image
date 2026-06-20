@@ -238,7 +238,6 @@ a {
 }
 
 .workspace {
-  max-width: 1180px;
   margin: 0 auto;
   padding: 54px 24px 72px;
 }
@@ -314,15 +313,21 @@ a {
   width: 100%;
   overflow: hidden;
   padding: 2px 0 12px;
-  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .gallery-track {
   width: max-content;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 14px;
   animation: gallery-marquee 68s linear infinite;
+}
+
+.gallery-track.reverse {
+  animation-direction: reverse;
 }
 
 .gallery-viewport:hover .gallery-track {
@@ -338,6 +343,14 @@ a {
   border-radius: var(--radius-md);
   background: var(--card);
   box-shadow: 0 16px 42px rgba(28, 25, 23, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gallery-card:hover {
+  transform: scale(1.06);
+  box-shadow: 0 20px 52px rgba(28, 25, 23, 0.18);
+  z-index: 10;
 }
 
 .gallery-card.portrait {
@@ -351,17 +364,18 @@ a {
 .gallery-card img {
   display: block;
   width: 100%;
-  height: 210px;
+  height: auto;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   background: var(--secondary);
 }
 
 .gallery-card.portrait img {
-  height: 232px;
+  aspect-ratio: 3 / 4;
 }
 
 .gallery-card.wide img {
-  height: 150px;
+  aspect-ratio: 16 / 9;
 }
 
 .gallery-card div {
@@ -478,16 +492,15 @@ a {
 .command-controls {
   position: relative;
   z-index: 1;
-  width: fit-content;
-  max-width: min(100%, 860px);
+  width: 100%;
   min-height: 44px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   min-width: 0;
-  margin: -1px auto 0;
+  margin: -1px 0 0;
   padding: 7px 9px 9px;
   border: 1px solid var(--border);
   border-top-color: rgba(231, 229, 228, 0.72);
@@ -519,6 +532,7 @@ a {
   min-height: 36px;
   padding: 0 12px;
   flex: 0 0 auto;
+  margin-left: auto;
   font-size: 13px;
 }
 
@@ -1039,6 +1053,18 @@ select:focus,
 
 .captcha-box {
   margin: 14px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.gallery-more {
+  display: inline-flex;
+  margin-top: 12px;
+  width: auto;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 18px;
+  font-size: 13px;
 }
 
 .primary-button,
@@ -1541,7 +1567,7 @@ select:focus,
 }
 
 .modal-actions {
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 16px;
 }
 
@@ -1648,15 +1674,16 @@ select:focus,
   }
 
   .gallery-card img {
-    height: 178px;
+    aspect-ratio: 1 / 1;
+    height: auto;
   }
 
   .gallery-card.portrait img {
-    height: 204px;
+    aspect-ratio: 3 / 4;
   }
 
   .gallery-card.wide img {
-    height: 126px;
+    aspect-ratio: 16 / 9;
   }
 
   .prompt-command-bar {

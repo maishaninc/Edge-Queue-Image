@@ -7,7 +7,7 @@ import GenerationLoader from './GenerationLoader';
 import type { CaptchaProvider } from '@/lib/config';
 import { COPY, type SiteLocale } from '@/lib/i18n';
 import { IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
-import { PROMPT_GALLERY_ITEMS, proxiedGithubImageUrl } from '@/lib/prompt-gallery';
+import { PROMPT_GALLERY_ITEMS, proxiedGithubImageUrl, type PromptGalleryItem } from '@/lib/prompt-gallery';
 import {
   base64ToBlob,
   clearHistoryItems,
@@ -158,21 +158,19 @@ function readStoredActiveJob(): StoredActiveJob | null {
   }
 }
 
-function PromptGallery({ locale, proxyEnabled, leaving }: { locale: SiteLocale; proxyEnabled: boolean; leaving: boolean }) {
+function PromptGallery({ locale, proxyEnabled, leaving, onCite }: { locale: SiteLocale; proxyEnabled: boolean; leaving: boolean; onCite: (title: string) => void }) {
+  const [previewItem, setPreviewItem] = useState<PromptGalleryItem | null>(null);
   const shouldProxy = locale === 'zh-CN' && proxyEnabled;
-  const galleryItems = [...PROMPT_GALLERY_ITEMS, ...PROMPT_GALLERY_ITEMS];
+  const rows = [PROMPT_GALLERY_ITEMS.slice(0, 7), PROMPT_GALLERY_ITEMS.slice(7, 14), PROMPT_GALLERY_ITEMS.slice(14)];
   const heading =
     locale === 'zh-CN'
-      ? {
-          eyebrow: 'Prompt Gallery',
-          title: '最新 GPT Image 2 灵感图库',
-          description: '内置 YouMind 最大 Prompt Gallery 的最新 20 个图片参考，结合社区精选、仓库导航和 API 商业案例方向做展示。',
-        }
-      : {
-          eyebrow: 'Prompt Gallery',
-          title: 'Fresh GPT Image 2 prompt references',
-          description: 'A built-in stream of the latest 20 visual references from the YouMind prompt gallery.',
-        };
+      ? { eyebrow: 'Prompt Gallery', title: '最新 GPT Image 2 灵感图库', description: '内置 YouMind 最大 Prompt Gallery 的最新 20 个图片参考，结合社区精选、仓库导航和 API 商业案例方向做展示。', more: '更多' }
+      : { eyebrow: 'Prompt Gallery', title: 'Fresh GPT Image 2 prompt references', description: 'A built-in stream of the latest 20 visual references from the YouMind prompt gallery.', more: 'More' };
+
+  function imgSrc(url: string) { return proxiedGithubImageUrl(url, shouldProxy); }
+  function imgFallback(e: React.SyntheticEvent<HTMLImageElement>) {
+    const el = e.currentTarget; el.onerror = null; el.src = proxiedGithubImageUrl(el.src, true);
+  }
 
   return (
     <section className={`prompt-gallery${leaving ? ' leaving' : ''}`} aria-label={heading.title}>
@@ -180,21 +178,46 @@ function PromptGallery({ locale, proxyEnabled, leaving }: { locale: SiteLocale; 
         <p className="eyebrow">{heading.eyebrow}</p>
         <h1>{heading.title}</h1>
         <p>{heading.description}</p>
+        <a className="secondary-button gallery-more" href="https://github.com/YouMind-OpenLab/awesome-gpt-image-2" target="_blank" rel="noopener noreferrer">{heading.more}</a>
       </div>
       <div className="gallery-viewport">
-        <div className="gallery-track">
-          {galleryItems.map((item, index) => (
-            <article className={`gallery-card ${item.aspect}`} key={`${item.id}-${index}`}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={proxiedGithubImageUrl(item.imageUrl, shouldProxy)} alt={item.title} loading={index < 8 ? 'eager' : 'lazy'} />
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.source}</span>
-              </div>
-            </article>
-          ))}
-        </div>
+        {rows.map((rowItems, rowIndex) => (
+          <div key={rowIndex} className={`gallery-track${rowIndex === 1 ? ' reverse' : ''}`}>
+            {[...rowItems, ...rowItems].map((item, index) => (
+              <article className={`gallery-card ${item.aspect}`} key={`${item.id}-${index}`} onDoubleClick={() => setPreviewItem(item)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imgSrc(item.imageUrl)} alt={item.title} loading={index < 4 ? 'eager' : 'lazy'} onError={imgFallback} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.source}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        ))}
       </div>
+
+      {previewItem ? (
+        <div className="modal-overlay" role="presentation" onClick={() => setPreviewItem(null)}>
+          <div className="modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2>{locale === 'zh-CN' ? '提示词参考' : 'Prompt Reference'}</h2>
+                <p>{previewItem.source}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setPreviewItem(null)} aria-label="close">×</button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="preview-image" src={imgSrc(previewItem.imageUrl)} alt={previewItem.title} onError={imgFallback} />
+            <p className="preview-prompt">{previewItem.title}</p>
+            <div className="modal-actions">
+              <button className="primary-button compact" type="button" onClick={() => { onCite(previewItem.title); setPreviewItem(null); }}>
+                {locale === 'zh-CN' ? '一键引用' : 'Use as prompt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -304,6 +327,13 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const status = jobState?.job.status;
+    if (status === 'succeeded' || status === 'failed' || status === 'expired') {
+      window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
+    }
+  }, [jobState]);
 
   useEffect(() => {
     return () => {
@@ -555,7 +585,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
     <main className="workspace">
       <section className="hero-workspace" id="generator">
         <div className={`command-hero${isGeneratingView ? ' generating' : ''}`}>
-          {!isGeneratingView ? <PromptGallery locale={locale} proxyEnabled={Boolean(config?.zhCnImageProxyEnabled)} leaving={closing} /> : null}
+          {!isGeneratingView ? <PromptGallery locale={locale} proxyEnabled={Boolean(config?.zhCnImageProxyEnabled)} leaving={closing} onCite={(title) => { setPrompt(title); window.scrollTo({ top: 0, behavior: 'smooth' }); }} /> : null}
 
           {!isGeneratingView ? (
             <form
