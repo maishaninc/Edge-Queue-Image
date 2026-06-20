@@ -195,8 +195,8 @@ CAPTCHA_PROVIDER=none
 
 | 变量 | 必填 | 示例 | 说明 |
 | --- | --- | --- | --- |
-| `TURSO_DATABASE_URL` | 是 | `libsql://your-db.turso.io` | libSQL/Turso 数据库地址。 |
-| `TURSO_AUTH_TOKEN` | 是 | `eyJ...` | 数据库认证令牌。 |
+| `TURSO_DATABASE_URL` | 创建任务时必填 | `file:local-dev.db` 或 `libsql://your-db.turso.io` | libSQL 数据库地址。本地开发可以使用 `file:` SQLite 文件；Vercel 生产环境应使用远程 Turso。 |
+| `TURSO_AUTH_TOKEN` | 仅远程 Turso 必填 | `eyJ...` | 远程 Turso 数据库认证令牌。本地 `file:local-dev.db` 不需要设置。 |
 
 应用会通过幂等 SQL 懒创建以下数据表：
 
@@ -211,7 +211,7 @@ CAPTCHA_PROVIDER=none
 生产环境说明：
 
 - Vercel 函数不能依赖本地 SQLite 文件保存持久队列状态。
-- 生产环境请使用 Turso/libSQL 保存队列状态。
+- 生产环境请使用远程 Turso/libSQL 保存队列状态，并设置 `TURSO_DATABASE_URL` 和 `TURSO_AUTH_TOKEN`。
 - 不要将 `TURSO_AUTH_TOKEN` 存储在会暴露给客户端的变量中。
 
 ### 管理员后台

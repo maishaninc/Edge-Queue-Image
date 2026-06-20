@@ -8,7 +8,7 @@ export function getDb() {
   if (client) return client;
   const { url, authToken } = getTursoConfig();
   if (!url || (!authToken && !url.startsWith('file:'))) {
-    throw new Error('Turso is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.');
+    throw new Error('Database is not configured. Set TURSO_DATABASE_URL. TURSO_AUTH_TOKEN is required only for remote Turso URLs.');
   }
   client = createClient({ url, authToken });
   return client;
