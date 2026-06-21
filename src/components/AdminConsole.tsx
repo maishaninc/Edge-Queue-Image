@@ -7,7 +7,7 @@ type AdminModel = {
   name: string;
   api: string;
   key: string;
-  dailyLimit: number;
+  dailyLimit?: number;
 };
 
 type AdminSettings = {

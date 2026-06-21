@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { OpenAI } from '@lobehub/icons';
 import CaptchaBox, { type CaptchaBoxHandle } from './CaptchaBox';
 import GenerationLoader from './GenerationLoader';
+import ImageGalleryCarousel from './ImageGalleryCarousel';
 import type { CaptchaProvider } from '@/lib/config';
 import { COPY, type SiteLocale } from '@/lib/i18n';
 import { IMAGE_QUALITIES, type ImageAspectRatio, type ImageQuality } from '@/lib/image-options';
 import { PROMPT_GALLERY_ITEMS, proxiedGithubImageUrl, rawGithubToJsdelivr, type PromptGalleryItem } from '@/lib/prompt-gallery';
+import { getGalleryImages } from '@/lib/gallery-images';
 import {
   base64ToBlob,
   clearHistoryItems,
@@ -288,6 +290,8 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
       aspectRatio: FIXED_ASPECT_RATIO,
     });
     activeJobIdRef.current = initialActiveJob.id;
+    // 恢复任务状态时，立即设置 jobId 以触发轮询
+    setJobId(initialActiveJob.id);
   }, [initialActiveJob]);
 
   const refreshHistory = useCallback(() => {
@@ -585,6 +589,7 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
               ? copy.statusExpired
               : copy.startingTitle;
   const showGenerationStage = Boolean(jobId);
+  const galleryImages = useMemo(() => getGalleryImages(), []);
 
   return (
     <main className="workspace">
@@ -890,6 +895,87 @@ export default function ImageGenerator({ locale }: { locale: SiteLocale }) {
               <p>{item.answer}</p>
             </details>
           ))}
+        </div>
+      </section>
+
+      <ImageGalleryCarousel images={galleryImages} onImageClick={(img) => setPrompt(img.title)} />
+
+      <section className="features-benefits-section" id="benefits">
+        <div className="benefits-hero">
+          <span className="eyebrow">{locale === 'zh-CN' ? '为什么选择我们' : 'Why Choose Us'}</span>
+          <h2>{locale === 'zh-CN' ? '沉淀每一次好结果' : 'Capture Every Great Result'}</h2>
+          <p>
+            {locale === 'zh-CN'
+              ? '收藏稳定出图的提示词、参考风格和结果图片，让下一次创作从已有经验开始。'
+              : 'Save prompts, styles, and results that work, so your next creation starts from proven experience.'}
+          </p>
+        </div>
+        <div className="benefits-grid">
+          <div className="benefit-card">
+            <div className="benefit-icon">💾</div>
+            <h3>{locale === 'zh-CN' ? '自动保存历史' : 'Auto-Save History'}</h3>
+            <p>
+              {locale === 'zh-CN'
+                ? '每次生成的图片自动保存在本地，随时回顾和复用成功的提示词。'
+                : 'Every generated image is saved locally. Review and reuse successful prompts anytime.'}
+            </p>
+          </div>
+          <div className="benefit-card">
+            <div className="benefit-icon">🎨</div>
+            <h3>{locale === 'zh-CN' ? '提示词收藏' : 'Prompt Collection'}</h3>
+            <p>
+              {locale === 'zh-CN'
+                ? '保存你喜欢的提示词模板，快速复用于新项目，提升创作效率。'
+                : 'Save your favorite prompt templates and quickly reuse them in new projects.'}
+            </p>
+          </div>
+          <div className="benefit-card">
+            <div className="benefit-icon">🔄</div>
+            <h3>{locale === 'zh-CN' ? '一键复用' : 'One-Click Reuse'}</h3>
+            <p>
+              {locale === 'zh-CN'
+                ? '从历史记录中一键复用提示词、模型和参数配置，快速迭代。'
+                : 'Reuse prompts, models, and settings from history with one click for rapid iteration.'}
+            </p>
+          </div>
+          <div className="benefit-card">
+            <div className="benefit-icon">📊</div>
+            <h3>{locale === 'zh-CN' ? '质量追踪' : 'Quality Tracking'}</h3>
+            <p>
+              {locale === 'zh-CN'
+                ? '查看每张图片的生成参数，了解哪些配置最适合你的需求。'
+                : 'View generation parameters for each image to understand what works best.'}
+            </p>
+          </div>
+          <div className="benefit-card">
+            <div className="benefit-icon">🌐</div>
+            <h3>{locale === 'zh-CN' ? '本地优先' : 'Local-First'}</h3>
+            <p>
+              {locale === 'zh-CN'
+                ? '所有数据存储在本地浏览器，保护隐私，无需担心数据丢失。'
+                : 'All data is stored locally in your browser, protecting privacy and preventing data loss.'}
+            </p>
+          </div>
+          <div className="benefit-card">
+            <div className="benefit-icon">⚡</div>
+            <h3>{locale === 'zh-CN' ? '快速预览' : 'Quick Preview'}</h3>
+            <p>
+              {locale === 'zh-CN'
+                ? '历史记录网格视图，快速浏览过往作品，找到灵感来源。'
+                : 'Grid view of history for quick browsing and finding inspiration from past work.'}
+            </p>
+          </div>
+        </div>
+        <div className="cta-section">
+          <h3>{locale === 'zh-CN' ? '准备好开始了吗？' : 'Ready to Get Started?'}</h3>
+          <p>
+            {locale === 'zh-CN'
+              ? '立即开始使用，体验高效的 AI 图像生成工作流。'
+              : 'Start now and experience an efficient AI image generation workflow.'}
+          </p>
+          <button className="cta-button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            {locale === 'zh-CN' ? '开始创作' : 'Start Creating'}
+          </button>
         </div>
       </section>
 
