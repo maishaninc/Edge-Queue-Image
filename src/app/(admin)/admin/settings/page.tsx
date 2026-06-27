@@ -496,6 +496,7 @@ function RuntimeTab({ settings, onSaved }: TabProps) {
       imageRetentionDays: settings.private.imageRetentionDays,
       activeLimit: settings.private.queue.activeLimit,
       maxQueue: settings.private.queue.maxQueue,
+      dailyLimit: settings.private.queue.dailyLimit,
     });
   }, [form, settings]);
 
@@ -505,7 +506,7 @@ function RuntimeTab({ settings, onSaved }: TabProps) {
       private: {
         runtime: { appOrigin: values.appOrigin, sessionExpireHours: values.sessionExpireHours },
         imageRetentionDays: values.imageRetentionDays,
-        queue: { activeLimit: values.activeLimit, maxQueue: values.maxQueue, dailyLimit: settings.private.queue.dailyLimit },
+        queue: { activeLimit: values.activeLimit, maxQueue: values.maxQueue, dailyLimit: values.dailyLimit },
       },
     });
   };
@@ -530,6 +531,9 @@ function RuntimeTab({ settings, onSaved }: TabProps) {
             <InputNumber min={0} max={500} style={{ width: "100%" }} />
           </Form.Item>
         </Flex>
+        <Form.Item name="dailyLimit" label="单用户每日生成上限（0 = 不限制）">
+          <InputNumber min={0} max={10000} style={{ width: "100%" }} />
+        </Form.Item>
         <Button type="primary" loading={saving} onClick={onSave}>
           保存
         </Button>

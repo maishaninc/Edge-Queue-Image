@@ -20,10 +20,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (row.user_id !== user.id && !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 });
 
   const bytes = new Uint8Array(row.data as Buffer);
+  // Never trust the stored mime for sniffing — force an image/* type and disable sniffing
+  // so a hostile provider can't smuggle HTML/JS through the image endpoint (stored XSS).
+  const rawMime = String(row.mime_type || "image/png");
+  const mime = /^image\/[a-z0-9.+-]+$/i.test(rawMime) ? rawMime : "image/png";
   return new NextResponse(bytes, {
     status: 200,
     headers: {
-      "Content-Type": row.mime_type || "image/png",
+      "Content-Type": mime,
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": "inline",
       "Cache-Control": "private, max-age=86400",
       "Content-Length": String(bytes.byteLength),
     },

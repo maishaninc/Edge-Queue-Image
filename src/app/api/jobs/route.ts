@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { query } from "@/lib/db";
+import { verifyCaptcha } from "@/lib/captcha";
 import { getCapacity, processGeneration, queueAheadCount } from "@/lib/queue";
 import { getCurrentUser } from "@/lib/session";
 import { getPrivateSettings } from "@/lib/settings";
@@ -38,9 +39,25 @@ export async function POST(req: Request) {
   if (!input.model) return NextResponse.json({ error: "缺少模型" }, { status: 400 });
   if (!input.prompt) return NextResponse.json({ error: "请输入生图提示词" }, { status: 400 });
 
+  const captcha = await verifyCaptcha(typeof raw.captchaToken === "string" ? raw.captchaToken : undefined);
+  if (!captcha.ok) return NextResponse.json({ error: captcha.error || "人机验证未通过" }, { status: 400 });
+
   const settings = await getPrivateSettings();
   const activeLimit = Math.max(1, settings.queue.activeLimit || 2);
   const maxQueue = Math.max(0, settings.queue.maxQueue || 20);
+
+  // Per-user daily cap (0 = unlimited) — abuse / cost protection for a free site.
+  const dailyLimit = settings.queue.dailyLimit || 0;
+  if (dailyLimit > 0) {
+    const used = await query(
+      "SELECT count(*) AS c FROM generation_histories WHERE user_id = $1 AND created_at > now() - interval '1 day'",
+      [user.id],
+    );
+    if (Number(used.rows[0].c) >= dailyLimit) {
+      return NextResponse.json({ error: "今日生成次数已达上限，请明天再试" }, { status: 429 });
+    }
+  }
+
   const { active, queued } = await getCapacity();
 
   if (active < activeLimit) {

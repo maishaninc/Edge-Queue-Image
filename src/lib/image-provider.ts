@@ -48,7 +48,34 @@ function parseProviderError(text: string, status: number): string {
   return `生成失败（${status}）${text ? `：${text.slice(0, 200)}` : ""}`;
 }
 
+/** Reject internal/loopback/link-local targets before fetching provider-returned URLs (SSRF guard). */
+function assertSafeRemoteUrl(raw: string): void {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("生成结果包含无效的图片地址");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("不支持的图片地址协议");
+  }
+  const host = url.hostname.toLowerCase();
+  const blocked =
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    host.endsWith(".internal") ||
+    host.endsWith(".local");
+  if (blocked) throw new Error("生成结果图片地址被拒绝（内网地址）");
+}
+
 async function fetchUrlAsImage(url: string, size: string | undefined): Promise<GeneratedImage> {
+  assertSafeRemoteUrl(url);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`下载生成图片失败（${response.status}）`);
   const mime = response.headers.get("content-type") || "image/png";

@@ -50,6 +50,13 @@ export async function runMigrations(pool: Pool): Promise<void> {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      ip text PRIMARY KEY,
+      fails int NOT NULL DEFAULT 0,
+      locked_until timestamptz,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS generation_histories (
       id text PRIMARY KEY,
       user_id text REFERENCES users(id) ON DELETE SET NULL,

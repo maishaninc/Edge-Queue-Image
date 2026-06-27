@@ -29,6 +29,7 @@ export type GenerationConfig = {
   quality?: string;
   count: number;
   references?: string[];
+  captchaToken?: string;
 };
 
 export type HistoryItem = {

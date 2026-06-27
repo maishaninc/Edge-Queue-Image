@@ -2,16 +2,37 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser, isAdmin } from "@/lib/session";
 import { getSettings, getPrivateSettings, saveSettings } from "@/lib/settings";
-import type { ModelChannel, PrivateSettings } from "@/lib/settings-defaults";
+import type { ModelChannel, PrivateSettings, PublicSettings } from "@/lib/settings-defaults";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * Redact secrets before sending settings to the admin browser. The save path
+ * preserves blanks (`pruneEmptySecrets` + channel-key reuse by name), so the UI
+ * keeps working without ever shipping the real clientSecret / apiKey / secretKey.
+ */
+function redactSecrets(settings: { public: PublicSettings; private: PrivateSettings }) {
+  const priv = settings.private;
+  return {
+    public: settings.public,
+    private: {
+      ...priv,
+      auth: {
+        google: { ...priv.auth.google, clientSecret: "" },
+        github: { ...priv.auth.github, clientSecret: "" },
+      },
+      captcha: { ...priv.captcha, secretKey: "" },
+      channels: priv.channels.map((channel) => ({ ...channel, apiKey: "" })),
+    },
+  };
+}
 
 export async function GET() {
   const admin = await getCurrentUser();
   if (!isAdmin(admin)) return NextResponse.json({ error: "无权访问" }, { status: 403 });
   const settings = await getSettings();
-  return NextResponse.json(settings);
+  return NextResponse.json(redactSecrets(settings));
 }
 
 /** Preserve existing secrets when the admin leaves a secret field blank. */
@@ -53,5 +74,5 @@ export async function POST(req: Request) {
 
   await saveSettings(body);
   const settings = await getSettings();
-  return NextResponse.json(settings);
+  return NextResponse.json(redactSecrets(settings));
 }

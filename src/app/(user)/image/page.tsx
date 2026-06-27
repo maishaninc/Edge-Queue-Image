@@ -9,6 +9,7 @@ import { nanoid } from "nanoid";
 import { AivroDrawableLoader } from "@/components/aivro-drawable-loader";
 import { AivroReveal } from "@/components/aivro-reveal";
 import { AppHeader } from "@/components/app-header";
+import { CaptchaWidget } from "@/components/captcha-widget";
 import { ImageSettingsPanel } from "@/components/image-settings-panel";
 import { ModelPicker } from "@/components/model-picker";
 import { useI18n } from "@/hooks/use-i18n";
@@ -49,6 +50,8 @@ export default function ImagePage() {
 
   const models = useMemo(() => publicSettings?.models?.availableModels ?? [], [publicSettings]);
   const qualities = publicSettings?.models?.qualities ?? ["auto", "high", "medium", "low"];
+  const captcha = publicSettings?.captcha;
+  const captchaEnabled = Boolean(captcha && captcha.provider !== "none" && captcha.siteKey);
 
   const [prompt, setPrompt] = useState("");
   const [references, setReferences] = useState<ReferenceImage[]>([]);
@@ -58,6 +61,8 @@ export default function ImagePage() {
   const [logs, setLogs] = useState<HistoryItem[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaKey, setCaptchaKey] = useState(0);
   const startedAtRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +119,10 @@ export default function ImagePage() {
       message.error(locale === "en-US" ? "No model configured" : "管理员尚未配置可用模型");
       return;
     }
+    if (captchaEnabled && !captchaToken) {
+      message.error(locale === "en-US" ? "Please complete the captcha" : "请先完成人机验证");
+      return;
+    }
 
     setRunning(true);
     startedAtRef.current = performance.now();
@@ -128,6 +137,7 @@ export default function ImagePage() {
         quality: config.quality,
         count: generationCount,
         references: references.length ? references.map((item) => item.dataUrl) : undefined,
+        captchaToken: captchaEnabled ? captchaToken : undefined,
       });
 
       let final = response;
@@ -154,6 +164,10 @@ export default function ImagePage() {
       message.error(text2);
     } finally {
       setRunning(false);
+      if (captchaEnabled) {
+        setCaptchaToken("");
+        setCaptchaKey((key) => key + 1);
+      }
     }
   };
 
@@ -308,6 +322,14 @@ export default function ImagePage() {
             <div className="hidden lg:block">{settingsPanel}</div>
 
             <div className="mt-auto pt-2">
+              {captchaEnabled && captcha ? (
+                <CaptchaWidget
+                  provider={captcha.provider}
+                  siteKey={captcha.siteKey}
+                  onToken={setCaptchaToken}
+                  refreshKey={captchaKey}
+                />
+              ) : null}
               <Button
                 type="primary"
                 block
