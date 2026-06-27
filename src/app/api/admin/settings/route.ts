@@ -1,51 +1,57 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { getAdminCsrfToken, isAdminAuthenticated, verifyAdminCsrfToken } from '@/lib/admin-auth';
-import {
-  adminPayloadForClient,
-  getAdminBootstrapConfig,
-  getRuntimeSettings,
-  mergeAdminSettingsWithExisting,
-  saveAdminSettings,
-  validateAdminSettings,
-} from '@/lib/settings';
+import { NextResponse } from "next/server";
 
-async function guardAdmin() {
-  const config = getAdminBootstrapConfig();
-  if (!config.enabled) {
-    return NextResponse.json({ error: 'admin_disabled' }, { status: 404 });
-  }
-  if (!config.configured) {
-    return NextResponse.json({ error: 'admin_not_configured' }, { status: 503 });
-  }
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-  return null;
-}
+import { getCurrentUser, isAdmin } from "@/lib/session";
+import { getSettings, getPrivateSettings, saveSettings } from "@/lib/settings";
+import type { ModelChannel, PrivateSettings } from "@/lib/settings-defaults";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const blocked = await guardAdmin();
-  if (blocked) return blocked;
-
-  const settings = await getRuntimeSettings();
-  return NextResponse.json({ settings: adminPayloadForClient(settings, await getAdminCsrfToken()) });
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return NextResponse.json({ error: "无权访问" }, { status: 403 });
+  const settings = await getSettings();
+  return NextResponse.json(settings);
 }
 
-export async function PUT(request: NextRequest) {
-  const blocked = await guardAdmin();
-  if (blocked) return blocked;
-  if (!(await verifyAdminCsrfToken(request.headers.get('x-admin-csrf')))) {
-    return NextResponse.json({ error: 'csrf_invalid' }, { status: 403 });
+/** Preserve existing secrets when the admin leaves a secret field blank. */
+function pruneEmptySecrets(priv: Partial<PrivateSettings> | undefined) {
+  if (!priv) return;
+  const auth = priv.auth as PrivateSettings["auth"] | undefined;
+  if (auth) {
+    for (const key of ["google", "github"] as const) {
+      if (auth[key] && auth[key].clientSecret === "") delete (auth[key] as { clientSecret?: string }).clientSecret;
+    }
+  }
+  if (priv.captcha && priv.captcha.secretKey === "") delete (priv.captcha as { secretKey?: string }).secretKey;
+}
+
+export async function POST(req: Request) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return NextResponse.json({ error: "无权访问" }, { status: 403 });
+
+  let body: { public?: Record<string, unknown>; private?: Record<string, unknown> } = {};
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    body = {};
   }
 
-  const body = await request.json().catch(() => null);
-  const existing = await getRuntimeSettings();
-  const bodyWithSecrets = mergeAdminSettingsWithExisting(body || {}, existing);
-  const validated = validateAdminSettings(bodyWithSecrets);
-  if (!validated.ok) {
-    return NextResponse.json({ error: 'invalid_settings', errors: validated.errors }, { status: 400 });
+  // Reuse existing channel API keys when the admin leaves them blank.
+  if (body.private && Array.isArray((body.private as Partial<PrivateSettings>).channels)) {
+    const current = await getPrivateSettings();
+    const priv = body.private as Partial<PrivateSettings>;
+    priv.channels = (priv.channels as ModelChannel[]).map((channel) => {
+      if (!channel.apiKey) {
+        const prev = current.channels.find((c) => c.name === channel.name);
+        if (prev) return { ...channel, apiKey: prev.apiKey };
+      }
+      return channel;
+    });
   }
+  pruneEmptySecrets(body.private as Partial<PrivateSettings>);
 
-  await saveAdminSettings(validated.settings);
-  return NextResponse.json({ ok: true, settings: adminPayloadForClient(validated.settings, await getAdminCsrfToken()) });
+  await saveSettings(body);
+  const settings = await getSettings();
+  return NextResponse.json(settings);
 }

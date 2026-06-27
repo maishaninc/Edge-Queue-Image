@@ -1,93 +1,98 @@
-import { createClient, type Client } from '@libsql/client';
-import { getTursoConfig } from './env';
+import "server-only";
+import pg from "pg";
+import type { PoolClient, PoolConfig, QueryResult, QueryResultRow } from "pg";
 
-let client: Client | null = null;
-let schemaReady: Promise<void> | null = null;
+import { runMigrations } from "@/lib/migrate";
 
-export function getDb() {
-  if (client) return client;
-  const { url, authToken } = getTursoConfig();
-  if (!url || (!authToken && !url.startsWith('file:'))) {
-    throw new Error('Database is not configured. Set TURSO_DATABASE_URL. TURSO_AUTH_TOKEN is required only for remote Turso URLs.');
-  }
-  client = createClient({ url, authToken });
-  return client;
+const { Pool } = pg;
+type PgPool = InstanceType<typeof Pool>;
+
+/**
+ * Aiven PostgreSQL connection. Only two env vars are required:
+ *  - DATABASE_URL       : the Aiven connection string (prefer the pooled/PgBouncer URI on serverless)
+ *  - DATABASE_CA_CERT   : the full CA certificate PEM (enables strict TLS verification)
+ *
+ * A single module-level Pool is reused across invocations (kept on globalThis so
+ * dev hot-reloads don't leak connections).
+ */
+
+function normalizePem(value: string): string {
+  // Vercel env values may arrive with literal "\n" sequences instead of newlines.
+  return value.includes("-----BEGIN") && value.includes("\\n")
+    ? value.replace(/\\n/g, "\n")
+    : value;
 }
 
-async function ensureColumn(db: Client, table: string, column: string, definition: string) {
-  const result = await db.execute(`PRAGMA table_info(${table})`);
-  const exists = result.rows.some((row) => String(row.name) === column);
-  if (!exists) {
-    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+function sslConfig(): PoolConfig["ssl"] {
+  const ca = process.env.DATABASE_CA_CERT?.trim();
+  if (ca) return { ca: normalizePem(ca), rejectUnauthorized: true };
+
+  const url = process.env.DATABASE_URL || "";
+  if (/sslmode=require/i.test(url) || /aivencloud\.com/i.test(url)) {
+    // TLS required but no CA supplied (e.g. local testing) — encrypt without strict verify.
+    return { rejectUnauthorized: false };
   }
+  return undefined;
 }
 
-export async function ensureSchema(db = getDb()) {
-  if (schemaReady) return schemaReady;
+type GlobalWithPool = typeof globalThis & {
+  __eqiPgPool?: PgPool;
+  __eqiMigrated?: Promise<void>;
+};
+const globalForPg = globalThis as GlobalWithPool;
 
-  schemaReady = (async () => {
-    await db.execute(
-      `CREATE TABLE IF NOT EXISTS jobs (
-          id TEXT PRIMARY KEY,
-          status TEXT NOT NULL,
-          prompt TEXT NOT NULL,
-          model_id TEXT NOT NULL,
-          is_priority INTEGER NOT NULL DEFAULT 0,
-          ip_hash TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          started_at TEXT,
-          finished_at TEXT,
-          expires_at TEXT,
-          quality TEXT NOT NULL DEFAULT '1K',
-          aspect_ratio TEXT NOT NULL DEFAULT '1:1',
-          result_url TEXT,
-          result_b64 TEXT,
-          error_code TEXT,
-          error_message_safe TEXT
-        )`,
-    );
+export function getPool(): PgPool {
+  if (!globalForPg.__eqiPgPool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set. See .env.example.");
+    }
+    globalForPg.__eqiPgPool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: sslConfig(),
+      max: Number(process.env.PG_POOL_MAX || 3),
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 15_000,
+    });
+  }
+  return globalForPg.__eqiPgPool;
+}
 
-    await ensureColumn(db, 'jobs', 'expires_at', 'TEXT');
-    await ensureColumn(db, 'jobs', 'quality', "TEXT NOT NULL DEFAULT '1K'");
-    await ensureColumn(db, 'jobs', 'aspect_ratio', "TEXT NOT NULL DEFAULT '1:1'");
+/** Run schema migrations + seeding exactly once per process. */
+export function ensureMigrated(): Promise<void> {
+  if (!globalForPg.__eqiMigrated) {
+    globalForPg.__eqiMigrated = runMigrations(getPool()).catch((error) => {
+      globalForPg.__eqiMigrated = undefined;
+      throw error;
+    });
+  }
+  return globalForPg.__eqiMigrated;
+}
 
-    await db.batch(
-      [
-        'CREATE INDEX IF NOT EXISTS idx_jobs_status_created_at ON jobs(status, created_at)',
-        'CREATE INDEX IF NOT EXISTS idx_jobs_status_priority_created_at ON jobs(status, is_priority, created_at)',
-        'CREATE INDEX IF NOT EXISTS idx_jobs_running_started_at ON jobs(status, started_at)',
-        'CREATE INDEX IF NOT EXISTS idx_jobs_expires_at ON jobs(expires_at)',
-        `CREATE TABLE IF NOT EXISTS app_settings (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        )`,
-        `CREATE TABLE IF NOT EXISTS admin_login_attempts (
-          ip_hash TEXT PRIMARY KEY,
-          failed_count INTEGER NOT NULL DEFAULT 0,
-          last_failed_at TEXT NOT NULL
-        )`,
-        `CREATE TABLE IF NOT EXISTS job_rate_limits (
-          ip_hash TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        )`,
-        'CREATE INDEX IF NOT EXISTS idx_job_rate_limits_ip_created_at ON job_rate_limits(ip_hash, created_at)',
-        `CREATE TABLE IF NOT EXISTS priority_usage (
-          ip_hash TEXT NOT NULL,
-          usage_date TEXT NOT NULL,
-          used_count INTEGER NOT NULL DEFAULT 0,
-          PRIMARY KEY (ip_hash, usage_date)
-        )`,
-        `CREATE TABLE IF NOT EXISTS model_daily_usage (
-          model_id TEXT NOT NULL,
-          usage_date TEXT NOT NULL,
-          used_count INTEGER NOT NULL DEFAULT 0,
-          PRIMARY KEY (model_id, usage_date)
-        )`,
-      ],
-      'write',
-    );
-  })();
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[],
+): Promise<QueryResult<T>> {
+  await ensureMigrated();
+  return getPool().query<T>(text, params as never[]);
+}
 
-  return schemaReady;
+/** Run a function inside a transaction with a dedicated pooled client. */
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  await ensureMigrated();
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // ignore rollback failure
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }

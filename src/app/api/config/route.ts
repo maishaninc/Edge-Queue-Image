@@ -1,20 +1,12 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { getPublicRuntimeConfigAsync } from '@/lib/config';
-import { cleanupExpiredJobs, getPriorityRemaining } from '@/lib/queue';
-import { getClientIp, hashIpAsync } from '@/lib/request';
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
-  const config = await getPublicRuntimeConfigAsync();
-  let priorityRemaining = 0;
+import { getPublicSettings } from "@/lib/settings";
 
-  if (config.priorityQueueEnabled) {
-    try {
-      await cleanupExpiredJobs();
-      priorityRemaining = await getPriorityRemaining(await hashIpAsync(getClientIp(request)));
-    } catch {
-      priorityRemaining = 0;
-    }
-  }
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-  return NextResponse.json({ ...config, priorityRemaining });
+/** Public, non-secret runtime config consumed by the browser (login + workbench). */
+export async function GET() {
+  const pub = await getPublicSettings();
+  return NextResponse.json(pub);
 }

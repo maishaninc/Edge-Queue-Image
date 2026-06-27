@@ -1,18 +1,16 @@
-import { NextResponse } from 'next/server';
-import { getModelConfigsAsync, getPublicModels } from '@/lib/models';
-import { isModelDailyLimitReached } from '@/lib/model-usage';
-import { isDatabaseConfigured } from '@/lib/env';
+import { NextResponse } from "next/server";
+
+import { getPublicSettings } from "@/lib/settings";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const allModels = await getModelConfigsAsync();
-  const available = await Promise.all(
-    allModels.map(async (model) => {
-      if (model.dailyLimit && isDatabaseConfigured()) {
-        const reached = await isModelDailyLimitReached(model.id, model.dailyLimit);
-        return reached ? null : model;
-      }
-      return model;
-    }),
-  );
-  return NextResponse.json({ models: getPublicModels(available.filter(Boolean) as typeof allModels) });
+  const pub = await getPublicSettings();
+  return NextResponse.json({
+    models: pub.models.availableModels,
+    defaultImageModel: pub.models.defaultImageModel,
+    qualities: pub.models.qualities,
+    sizes: pub.models.sizes,
+  });
 }

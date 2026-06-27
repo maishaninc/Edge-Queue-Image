@@ -1,13 +1,11 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
+  // pg (node-postgres) must run on the Node.js runtime, not be bundled.
+  serverExternalPackages: ["pg"],
+  eslint: {
+    // Lint is run separately via `npm run lint`; don't block production builds.
+    ignoreDuringBuilds: true,
   },
 };
 

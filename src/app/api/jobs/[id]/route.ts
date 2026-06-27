@@ -1,38 +1,82 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { advanceQueue, getJob, getQueueSnapshot } from '@/lib/queue';
+import { NextResponse } from "next/server";
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
+import { query } from "@/lib/db";
+import { claimQueuedJob, loadHistoryImages, processGeneration, queueAheadCount } from "@/lib/queue";
+import { getCurrentUser, isAdmin } from "@/lib/session";
+import { getPrivateSettings } from "@/lib/settings";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+type JobRequest = {
+  model: string;
+  prompt: string;
+  size?: string;
+  quality?: string;
+  count?: number;
+  references?: string[];
 };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
-  try {
-    await advanceQueue(1);
-    const job = await getJob(id);
-    if (!job) {
-      return NextResponse.json({ error: 'job_not_found' }, { status: 404 });
-    }
-
-    const snapshot = await getQueueSnapshot(id);
-    return NextResponse.json({
-      job: {
-        id: job.id,
-        status: job.status,
-        modelId: job.model_id,
-        isPriority: job.is_priority === 1,
-        quality: job.quality,
-        aspectRatio: job.aspect_ratio,
-        expiresAt: job.expires_at,
-        resultUrl: job.result_url,
-        resultB64: job.result_b64,
-        errorCode: job.error_code,
-        errorMessage: job.error_message_safe,
-      },
-      queue: snapshot,
-    });
-  } catch {
-    return NextResponse.json({ error: 'database_unavailable' }, { status: 503 });
+  const jobRes = await query("SELECT * FROM generation_jobs WHERE id = $1", [id]);
+  const job = jobRes.rows[0];
+  if (!job) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
+  if (job.user_id !== user.id && !isAdmin(user)) {
+    return NextResponse.json({ error: "无权访问" }, { status: 403 });
   }
+
+  if (job.status === "succeeded") {
+    const images = job.history_id ? await loadHistoryImages(job.history_id) : [];
+    return NextResponse.json({ status: "succeeded", historyId: job.history_id, images });
+  }
+  if (job.status === "failed") return NextResponse.json({ status: "failed", error: job.error });
+  if (job.status === "canceled") return NextResponse.json({ status: "canceled" });
+
+  if (job.status === "queued") {
+    const settings = await getPrivateSettings();
+    const activeLimit = Math.max(1, settings.queue.activeLimit || 2);
+    const claimed = await claimQueuedJob(id, activeLimit);
+    if (claimed) {
+      const input = (job.request || {}) as JobRequest;
+      try {
+        const result = await processGeneration(user, {
+          model: input.model,
+          prompt: input.prompt,
+          size: input.size,
+          quality: input.quality,
+          count: input.count || 1,
+          references: input.references,
+        });
+        await query("UPDATE generation_jobs SET status='succeeded', history_id=$2, finished_at=now() WHERE id=$1", [
+          id,
+          result.historyId,
+        ]);
+        return NextResponse.json({ status: "succeeded", historyId: result.historyId, images: result.images });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "生成失败";
+        await query("UPDATE generation_jobs SET status='failed', error=$2, finished_at=now() WHERE id=$1", [id, message]);
+        return NextResponse.json({ status: "failed", error: message });
+      }
+    }
+    const ahead = await queueAheadCount(id);
+    return NextResponse.json({ status: "queued", queuePosition: ahead + 1, aheadCount: ahead });
+  }
+
+  return NextResponse.json({ status: "executing" });
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  await query(
+    "UPDATE generation_jobs SET status='canceled', finished_at=now() WHERE id=$1 AND user_id=$2 AND status='queued'",
+    [id, user.id],
+  );
+  return NextResponse.json({ ok: true });
 }

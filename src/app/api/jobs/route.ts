@@ -1,75 +1,84 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { verifyCaptcha } from '@/lib/captcha';
-import { createJob } from '@/lib/queue';
-import { getClientIp, hashIpAsync } from '@/lib/request';
-import { resolveModelAsync } from '@/lib/models';
-import { areImageOptionsValid, normalizeImageOptions } from '@/lib/image-options';
-import { isJobRateLimitedForIp, recordJobSubmission } from '@/lib/security';
-import { isModelDailyLimitReached, recordModelUsage } from '@/lib/model-usage';
+import { randomUUID } from "node:crypto";
+import { NextResponse } from "next/server";
 
-const MAX_PROMPT_LENGTH = 4000;
+import { query } from "@/lib/db";
+import { getCapacity, processGeneration, queueAheadCount } from "@/lib/queue";
+import { getCurrentUser } from "@/lib/session";
+import { getPrivateSettings } from "@/lib/settings";
 
-type CreateJobBody = {
-  prompt?: string;
-  modelId?: string;
-  captchaToken?: string;
-  usePriority?: boolean;
-  quality?: string;
-  aspectRatio?: string;
-};
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => ({}))) as CreateJobBody;
-  const prompt = body.prompt?.trim() || '';
-  const modelId = body.modelId || 'default';
-  const ip = getClientIp(request);
-  const ipHash = await hashIpAsync(ip);
+function parseBody(body: Record<string, unknown>) {
+  const references = Array.isArray(body.references)
+    ? (body.references as unknown[]).filter((r): r is string => typeof r === "string").slice(0, 4)
+    : undefined;
+  return {
+    model: String(body.model || "").trim(),
+    prompt: String(body.prompt || "").trim(),
+    size: body.size ? String(body.size) : undefined,
+    quality: body.quality ? String(body.quality) : undefined,
+    count: Math.min(4, Math.max(1, Number(body.count) || 1)),
+    references: references && references.length ? references : undefined,
+  };
+}
 
-  if (!prompt || prompt.length > MAX_PROMPT_LENGTH) {
-    return NextResponse.json({ error: 'invalid_prompt' }, { status: 400 });
-  }
+export async function POST(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
-  const model = await resolveModelAsync(modelId);
-  if (!model) {
-    return NextResponse.json({ error: 'model_not_found' }, { status: 400 });
-  }
-  if (model.dailyLimit && (await isModelDailyLimitReached(modelId, model.dailyLimit))) {
-    return NextResponse.json({ error: 'model_not_found' }, { status: 400 });
-  }
-
-  if (!areImageOptionsValid({ quality: body.quality, aspectRatio: body.aspectRatio })) {
-    return NextResponse.json({ error: 'invalid_image_options' }, { status: 400 });
-  }
-
-  const imageOptions = normalizeImageOptions({ quality: body.quality, aspectRatio: body.aspectRatio });
-
-  const captcha = await verifyCaptcha(body.captchaToken, ip);
-  if (!captcha.ok) {
-    return NextResponse.json({ error: captcha.error || 'captcha_invalid' }, { status: 400 });
-  }
-
+  let raw: Record<string, unknown> = {};
   try {
-    if (await isJobRateLimitedForIp(ipHash)) {
-      return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
-    }
-
-    const created = await createJob({
-      prompt,
-      modelId,
-      ipHash,
-      usePriority: Boolean(body.usePriority),
-      quality: imageOptions.quality,
-      aspectRatio: imageOptions.aspectRatio,
-    });
-
-    if (!created.ok) {
-      const status = created.error === 'queue_full' ? 429 : 400;
-      return NextResponse.json({ error: created.error }, { status });
-    }
-
-    await Promise.all([recordJobSubmission(ipHash), recordModelUsage(modelId)]);
-    return NextResponse.json({ id: created.id, isPriority: created.isPriority });
+    raw = (await req.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ error: 'database_unavailable' }, { status: 503 });
+    raw = {};
   }
+  const input = parseBody(raw);
+  if (!input.model) return NextResponse.json({ error: "缺少模型" }, { status: 400 });
+  if (!input.prompt) return NextResponse.json({ error: "请输入生图提示词" }, { status: 400 });
+
+  const settings = await getPrivateSettings();
+  const activeLimit = Math.max(1, settings.queue.activeLimit || 2);
+  const maxQueue = Math.max(0, settings.queue.maxQueue || 20);
+  const { active, queued } = await getCapacity();
+
+  if (active < activeLimit) {
+    const jobId = randomUUID();
+    await query(
+      `INSERT INTO generation_jobs (id, user_id, status, model, prompt, request, started_at)
+       VALUES ($1,$2,'executing',$3,$4,$5, now())`,
+      [jobId, user.id, input.model, input.prompt, JSON.stringify(input)],
+    );
+    try {
+      const result = await processGeneration(user, input);
+      await query("UPDATE generation_jobs SET status='succeeded', history_id=$2, finished_at=now() WHERE id=$1", [
+        jobId,
+        result.historyId,
+      ]);
+      return NextResponse.json({
+        status: "succeeded",
+        taskId: jobId,
+        historyId: result.historyId,
+        images: result.images,
+        durationMs: result.durationMs,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "生成失败";
+      await query("UPDATE generation_jobs SET status='failed', error=$2, finished_at=now() WHERE id=$1", [jobId, message]);
+      return NextResponse.json({ status: "failed", taskId: jobId, error: message });
+    }
+  }
+
+  if (queued >= maxQueue) {
+    return NextResponse.json({ error: "当前排队人数较多，请稍后再试" }, { status: 429 });
+  }
+  const jobId = randomUUID();
+  await query(
+    `INSERT INTO generation_jobs (id, user_id, status, model, prompt, request)
+     VALUES ($1,$2,'queued',$3,$4,$5)`,
+    [jobId, user.id, input.model, input.prompt, JSON.stringify(input)],
+  );
+  const ahead = await queueAheadCount(jobId);
+  return NextResponse.json({ status: "queued", taskId: jobId, queuePosition: ahead + 1, aheadCount: ahead });
 }

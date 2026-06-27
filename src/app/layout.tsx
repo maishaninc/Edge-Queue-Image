@@ -1,42 +1,42 @@
-import type { Metadata } from 'next';
-import { headers } from 'next/headers';
-import './globals.css';
-import { DEFAULT_LOCALE, SEO_COPY, SITE_NAME, SITE_URL, localeFromPathname, relativeLanguageAlternates } from '@/lib/i18n';
+import type { Metadata } from "next";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
+import React from "react";
 
-const defaultSeo = SEO_COPY[DEFAULT_LOCALE];
+import { AppProviders } from "@/components/layout/app-providers";
+import "antd/dist/reset.css";
+import "./globals.css";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: defaultSeo.title,
-  description: defaultSeo.description,
-  keywords: defaultSeo.keywords,
-  alternates: {
-    canonical: '/',
-    languages: relativeLanguageAlternates(),
-  },
-  openGraph: {
-    title: defaultSeo.title,
-    description: defaultSeo.description,
-    url: SITE_URL,
-    siteName: SITE_NAME,
-    type: 'website',
-    images: [{ url: '/logo.svg', alt: SITE_NAME }],
-  },
-  twitter: {
-    card: 'summary',
-    title: defaultSeo.title,
-    description: defaultSeo.description,
-    images: ['/logo.svg'],
+  title: "免费 AI 生成图片",
+  description: "免费的 AI 图片生成站点，登录即可生成、保存与管理你的作品。",
+  icons: {
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+    apple: "/logo.svg",
   },
 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const headersList = await headers();
-  const locale = localeFromPathname(headersList.get('x-pathname'));
-
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang={locale} suppressHydrationWarning>
-      <body>{children}</body>
+    <html lang="zh-CN" suppressHydrationWarning className="font-sans">
+      <body
+        className="bg-background text-foreground antialiased"
+        style={{
+          fontFamily:
+            '"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif',
+        }}
+      >
+        <AntdRegistry>
+          <AppProviders>{children}</AppProviders>
+        </AntdRegistry>
+      </body>
     </html>
   );
 }
