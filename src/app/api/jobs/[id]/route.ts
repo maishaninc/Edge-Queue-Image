@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { claimQueuedJob, loadHistoryImages, processGeneration, queueAheadCount } from "@/lib/queue";
 import { getCurrentUser, isAdmin } from "@/lib/session";
-import { getPrivateSettings } from "@/lib/settings";
+import { getPrivateSettings, getPublicSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +52,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           count: input.count || 1,
           references: input.references,
         });
+        const cost = Math.max(0, Math.floor((await getPublicSettings()).credits.costPerImage || 0)) * (input.count || 1);
+        if (cost > 0) {
+          await query("UPDATE users SET credits = GREATEST(0, credits - $1) WHERE id = $2", [cost, user.id]);
+        }
         await query("UPDATE generation_jobs SET status='succeeded', history_id=$2, finished_at=now() WHERE id=$1", [
           id,
           result.historyId,

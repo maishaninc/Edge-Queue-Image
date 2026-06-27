@@ -30,10 +30,14 @@ export async function runMigrations(pool: Pool): Promise<void> {
       password_hash text,
       must_change_password boolean NOT NULL DEFAULT false,
       email_verified boolean NOT NULL DEFAULT false,
+      credits int NOT NULL DEFAULT 0,
+      last_check_in_date date,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
       last_login_at timestamptz
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS credits int NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_check_in_date date;
 
     CREATE TABLE IF NOT EXISTS sessions (
       token text PRIMARY KEY,
@@ -128,11 +132,26 @@ export async function runMigrations(pool: Pool): Promise<void> {
     [JSON.stringify(DEFAULT_PRIVATE_SETTINGS)],
   );
 
-  // Seed default admin only when no admin exists.
-  await pool.query(
-    `INSERT INTO users (id, username, display_name, role, status, auth_provider, password_hash, must_change_password, email_verified)
-     SELECT $1, 'admin', '管理员', 'admin', 'active', 'password', $2, true, true
-     WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')`,
-    [randomUUID(), hashPassword("admin")],
-  );
+  // Bootstrap / sync the admin account from env (ADMIN_USERNAME + ADMIN_PASSWORD).
+  // Env stays authoritative across redeploys; if no password is provided we fall
+  // back to admin/admin with a forced first-login change.
+  const adminUsername = (process.env.ADMIN_USERNAME || "admin").trim() || "admin";
+  const adminPassword = process.env.ADMIN_PASSWORD || "";
+  const hasEnvPassword = adminPassword.length > 0;
+  const existingAdmin = await pool.query("SELECT id FROM users WHERE username = $1", [adminUsername]);
+  if (existingAdmin.rows[0]) {
+    if (hasEnvPassword) {
+      await pool.query(
+        `UPDATE users SET password_hash = $1, role = 'admin', status = 'active',
+           must_change_password = false, updated_at = now() WHERE id = $2`,
+        [hashPassword(adminPassword), existingAdmin.rows[0].id],
+      );
+    }
+  } else {
+    await pool.query(
+      `INSERT INTO users (id, username, display_name, role, status, auth_provider, password_hash, must_change_password, email_verified)
+       VALUES ($1, $2, '管理员', 'admin', 'active', 'password', $3, $4, true)`,
+      [randomUUID(), adminUsername, hashPassword(hasEnvPassword ? adminPassword : "admin"), !hasEnvPassword],
+    );
+  }
 }

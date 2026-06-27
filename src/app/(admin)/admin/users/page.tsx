@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { ProTable, type ActionType, type ProColumns } from "@ant-design/pro-components";
-import { App, Avatar, Button, Flex, Form, Input, Modal, Popconfirm, Select, Tag, Typography } from "antd";
+import { App, Avatar, Button, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 
 import { deleteAdminUser, fetchAdminUsers, saveAdminUser, type AdminUser } from "@/services/api/admin";
@@ -24,6 +24,7 @@ export default function AdminUsersPage() {
       displayName: user?.displayName || "",
       role: user?.role || "user",
       status: user?.status || "active",
+      credits: user?.credits ?? 0,
       password: "",
     });
   };
@@ -87,6 +88,12 @@ export default function AdminUsersPage() {
       dataIndex: "authProvider",
       width: 120,
       render: (_, item) => <Tag>{item.authProvider}</Tag>,
+    },
+    {
+      title: "额度",
+      dataIndex: "credits",
+      width: 80,
+      render: (_, item) => item.credits ?? 0,
     },
     {
       title: "最近登录",
@@ -167,6 +174,9 @@ export default function AdminUsersPage() {
               />
             </Form.Item>
           </Flex>
+          <Form.Item name="credits" label="额度">
+            <InputNumber min={0} style={{ width: "100%" }} />
+          </Form.Item>
           <Form.Item name="password" label={edit.user ? "重置密码（留空不修改）" : "密码（可选）"}>
             <Input.Password autoComplete="new-password" />
           </Form.Item>

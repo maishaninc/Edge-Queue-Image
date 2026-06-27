@@ -43,6 +43,8 @@ export type PublicSettings = {
     adsTxt: string;
     pages: { home: boolean; image: boolean; login: boolean };
   };
+  checkIn: { enabled: boolean };
+  credits: { costPerImage: number };
 };
 
 export type PrivateOAuthProvider = {
@@ -62,6 +64,7 @@ export type PrivateSettings = {
   channels: ModelChannel[];
   captcha: { provider: CaptchaProvider; siteKey: string; secretKey: string };
   auth: { google: PrivateOAuthProvider; github: PrivateOAuthProvider };
+  checkIn: { enabled: boolean; mode: "fixed" | "random"; amount: number; min: number; max: number };
 };
 
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
@@ -84,6 +87,8 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     adsTxt: "",
     pages: { home: true, image: true, login: false },
   },
+  checkIn: { enabled: false },
+  credits: { costPerImage: 0 },
 };
 
 export const DEFAULT_PRIVATE_SETTINGS: PrivateSettings = {
@@ -112,6 +117,7 @@ export const DEFAULT_PRIVATE_SETTINGS: PrivateSettings = {
       scope: "read:user user:email",
     },
   },
+  checkIn: { enabled: false, mode: "fixed", amount: 10, min: 5, max: 20 },
 };
 
 type Plain = Record<string, unknown>;
