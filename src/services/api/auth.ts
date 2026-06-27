@@ -8,6 +8,8 @@ export type AuthUser = {
   avatarUrl: string | null;
   role: "user" | "admin";
   mustChangePassword: boolean;
+  credits: number;
+  checkedInToday?: boolean;
 };
 
 export async function fetchCurrentUser(): Promise<AuthUser | null> {
@@ -23,4 +25,9 @@ export async function adminLogin(username: string, password: string): Promise<Au
 
 export async function logout(): Promise<void> {
   await api.post("/api/auth/logout");
+}
+
+export async function checkIn(): Promise<{ gained: number; credits: number }> {
+  const { data } = await api.post<{ gained: number; credits: number }>("/api/checkin");
+  return data;
 }

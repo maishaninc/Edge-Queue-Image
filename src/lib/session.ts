@@ -22,12 +22,13 @@ export type AppUser = {
   githubId: string | null;
   mustChangePassword: boolean;
   emailVerified: boolean;
+  credits: number;
   createdAt: string;
   lastLoginAt: string | null;
 };
 
 export const USER_COLUMNS = `id, username, email, display_name, avatar_url, role, status,
-  auth_provider, google_id, github_id, must_change_password, email_verified, created_at, last_login_at`;
+  auth_provider, google_id, github_id, must_change_password, email_verified, credits, created_at, last_login_at`;
 
 function toIso(value: unknown): string | null {
   if (!value) return null;
@@ -48,6 +49,7 @@ export function mapUser(row: QueryResultRow): AppUser {
     githubId: row.github_id ?? null,
     mustChangePassword: Boolean(row.must_change_password),
     emailVerified: Boolean(row.email_verified),
+    credits: Number(row.credits ?? 0),
     createdAt: toIso(row.created_at) ?? "",
     lastLoginAt: toIso(row.last_login_at),
   };
@@ -63,6 +65,7 @@ export function toClientUser(user: AppUser) {
     avatarUrl: user.avatarUrl,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
+    credits: user.credits,
   };
 }
 export type ClientUser = ReturnType<typeof toClientUser>;

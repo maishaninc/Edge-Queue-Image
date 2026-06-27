@@ -24,7 +24,7 @@ import {
 import { fetchAdminSettings, saveAdminSettings, testChannel, type AdminSettings } from "@/services/api/admin";
 import type { ModelChannel } from "@/lib/settings-defaults";
 
-const TAB_KEYS = ["model", "thirdParty", "access", "captcha", "runtime"] as const;
+const TAB_KEYS = ["model", "thirdParty", "access", "captcha", "checkIn", "runtime"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 export default function AdminSettingsPage() {
@@ -69,6 +69,7 @@ export default function AdminSettingsPage() {
     { key: "thirdParty", label: "第三方登录", children: <OAuthTab settings={settings} onSaved={reload} /> },
     { key: "access", label: "注册与访问", children: <AccessTab settings={settings} onSaved={reload} /> },
     { key: "captcha", label: "验证码", children: <CaptchaTab settings={settings} onSaved={reload} /> },
+    { key: "checkIn", label: "签到额度", children: <CheckInTab settings={settings} onSaved={reload} /> },
     { key: "runtime", label: "运行配置", children: <RuntimeTab settings={settings} onSaved={reload} /> },
   ];
 
@@ -475,6 +476,86 @@ function CaptchaTab({ settings, onSaved }: TabProps) {
         </Form.Item>
         <Form.Item name="secretKey" label="Secret Key（留空沿用已保存）">
           <Input.Password autoComplete="off" />
+        </Form.Item>
+        <Button type="primary" loading={saving} onClick={onSave}>
+          保存
+        </Button>
+      </Form>
+    </Card>
+  );
+}
+
+// ----------------------------- Check-in / credits -----------------------------
+
+function CheckInTab({ settings, onSaved }: TabProps) {
+  const { saving, save } = useSaver(onSaved);
+  const [form] = Form.useForm();
+  const mode = Form.useWatch("mode", form);
+
+  useEffect(() => {
+    form.setFieldsValue({
+      enabled: settings.private.checkIn.enabled,
+      mode: settings.private.checkIn.mode,
+      amount: settings.private.checkIn.amount,
+      min: settings.private.checkIn.min,
+      max: settings.private.checkIn.max,
+      costPerImage: settings.public.credits.costPerImage,
+    });
+  }, [form, settings]);
+
+  const onSave = async () => {
+    const values = await form.validateFields();
+    await save({
+      public: {
+        checkIn: { enabled: values.enabled },
+        credits: { costPerImage: values.costPerImage },
+      },
+      private: {
+        checkIn: {
+          enabled: values.enabled,
+          mode: values.mode,
+          amount: values.amount,
+          min: values.min,
+          max: values.max,
+        },
+      },
+    });
+  };
+
+  return (
+    <Card title="签到与额度" style={{ maxWidth: 640 }}>
+      <Form form={form} layout="vertical">
+        <Form.Item name="enabled" label="开启每日签到" valuePropName="checked">
+          <Switch />
+        </Form.Item>
+        <Form.Item name="mode" label="额度模式">
+          <Select
+            options={[
+              { value: "fixed", label: "每天固定额度" },
+              { value: "random", label: "每天随机区间额度" },
+            ]}
+          />
+        </Form.Item>
+        {mode === "random" ? (
+          <Flex gap={12}>
+            <Form.Item name="min" label="随机最小值" className="flex-1">
+              <InputNumber min={0} style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item name="max" label="随机最大值" className="flex-1">
+              <InputNumber min={0} style={{ width: "100%" }} />
+            </Form.Item>
+          </Flex>
+        ) : (
+          <Form.Item name="amount" label="每天固定额度">
+            <InputNumber min={0} style={{ width: "100%" }} />
+          </Form.Item>
+        )}
+        <Form.Item
+          name="costPerImage"
+          label="每张图片消耗额度（0 = 免费，不消耗）"
+          extra="设为大于 0 时，生成图片会扣减用户额度；用户可通过每日签到获取额度。"
+        >
+          <InputNumber min={0} style={{ width: "100%" }} />
         </Form.Item>
         <Button type="primary" loading={saving} onClick={onSave}>
           保存

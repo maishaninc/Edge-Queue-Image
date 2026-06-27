@@ -4,22 +4,29 @@
 
 - **/image** 生图工作台（文生图 + 参考图编辑 + 历史记录侧栏）
 - **/login** 登录页（Google / GitHub 第三方登录 + 管理员账号密码，含 anime.js 描边/入场动画）
-- **/admin** 后台（用户管理 / 谷歌广告 / 模型配置 / 系统设置 / 生图日志）
+- **/admin** 后台（用户管理 / 谷歌广告 / 模型配置 / 系统设置 / 生图日志 / 签到额度）
 - 生成的图片与提示词、用户、记录 ID 全部入库，支持后台「生图日志」回看
+- **每日签到**：管理员可设「每天固定额度」或「每天随机区间额度」；可选让生成按额度计费
 
-## 只需要 2 个环境变量
+## 需要 4 个环境变量
 
 ```env
-# Aiven PostgreSQL 连接串（建议用控制台的「连接池 / PgBouncer」URI 以适配 Serverless）
+# 1) Aiven PostgreSQL 连接串（建议用控制台的「连接池 / PgBouncer」URI 以适配 Serverless）
 DATABASE_URL=postgres://avnadmin:password@host-xxxx.aivencloud.com:PORT/defaultdb?sslmode=require
 
-# Aiven 提供的 CA 证书（ca.pem 完整内容，含 BEGIN/END CERTIFICATE 行；Vercel 可直接粘贴多行）
+# 2) Aiven 提供的 CA 证书（ca.pem 完整内容，含 BEGIN/END CERTIFICATE 行；Vercel 可直接粘贴多行）
 DATABASE_CA_CERT=-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----
+
+# 3) 管理员账号
+ADMIN_USERNAME=admin
+
+# 4) 管理员密码（部署后用它登录后台；每次部署都会以此为准同步管理员密码）
+ADMIN_PASSWORD=your-strong-password
 ```
 
-> OAuth 客户端密钥、模型 API Key、谷歌广告、验证码等**全部在后台「系统设置」里填写并存入数据库**，不需要额外环境变量。
+> OAuth 客户端密钥、模型 API Key、谷歌广告、验证码、签到额度等**全部在后台「系统设置」里填写并存入数据库**，不需要额外环境变量。
 
 ## 本地启动
 
@@ -34,7 +41,7 @@ npm run dev
 
 ### 首次配置（重要）
 
-1. 访问 `/login`，用默认管理员 **`admin` / `admin`** 登录 → 进入 `/admin` 会**强制修改密码**。
+1. 访问 `/login`，用环境变量里设置的 **`ADMIN_USERNAME` / `ADMIN_PASSWORD`** 登录后台 `/admin`。
 2. 「模型配置」→ 新增渠道：填 `Base URL`（如 `https://api.openai.com/v1`）、`API Key`、模型（如 `gpt-image-1`）→ 在「对外可用模型」里把它加入可选模型并设为默认 → 保存。
 3. 「第三方登录」→ 填 Google / GitHub 的 `Client ID` / `Client Secret` 并启用。页面会显示需要在 Google/GitHub 后台配置的**回调地址**：
    - Google：`https://你的域名/api/auth/oauth/google/callback`

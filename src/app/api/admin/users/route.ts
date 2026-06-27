@@ -53,16 +53,18 @@ export async function POST(req: Request) {
   const role = body.role === "admin" ? "admin" : "user";
   const status = body.status === "ban" ? "ban" : "active";
   const password = body.password ? String(body.password) : "";
+  const creditsValue = Number.isFinite(Number(body.credits)) ? Math.max(0, Math.floor(Number(body.credits))) : null;
 
   if (!username) return NextResponse.json({ error: "用户名不能为空" }, { status: 400 });
 
   if (id) {
     await query(
-      `UPDATE users SET username=$2, email=$3, display_name=$4, role=$5, status=$6,
-         ${password ? "password_hash=$7," : ""} updated_at=now() WHERE id=$1`,
+      `UPDATE users SET username=$2, email=$3, display_name=$4, role=$5, status=$6, credits=COALESCE($7, credits)${
+        password ? ", password_hash=$8" : ""
+      }, updated_at=now() WHERE id=$1`,
       password
-        ? [id, username, email, displayName, role, status, hashPassword(password)]
-        : [id, username, email, displayName, role, status],
+        ? [id, username, email, displayName, role, status, creditsValue, hashPassword(password)]
+        : [id, username, email, displayName, role, status, creditsValue],
     );
     const updated = await query(`SELECT ${USER_COLUMNS} FROM users WHERE id=$1`, [id]);
     return NextResponse.json({ user: updated.rows[0] ? toClientUser(mapUser(updated.rows[0])) : null });
@@ -70,9 +72,9 @@ export async function POST(req: Request) {
 
   const newId = randomUUID();
   await query(
-    `INSERT INTO users (id, username, email, display_name, role, status, auth_provider, password_hash, email_verified)
-     VALUES ($1,$2,$3,$4,$5,$6,'password',$7,true)`,
-    [newId, username, email, displayName, role, status, password ? hashPassword(password) : null],
+    `INSERT INTO users (id, username, email, display_name, role, status, auth_provider, password_hash, email_verified, credits)
+     VALUES ($1,$2,$3,$4,$5,$6,'password',$7,true,$8)`,
+    [newId, username, email, displayName, role, status, password ? hashPassword(password) : null, creditsValue ?? 0],
   );
   return NextResponse.json({ ok: true, id: newId });
 }

@@ -13,6 +13,7 @@ export type AdminUser = {
   googleId: string | null;
   githubId: string | null;
   emailVerified: boolean;
+  credits: number;
   createdAt: string;
   lastLoginAt: string | null;
 };

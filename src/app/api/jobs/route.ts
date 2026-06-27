@@ -5,7 +5,7 @@ import { query } from "@/lib/db";
 import { verifyCaptcha } from "@/lib/captcha";
 import { getCapacity, processGeneration, queueAheadCount } from "@/lib/queue";
 import { getCurrentUser } from "@/lib/session";
-import { getPrivateSettings } from "@/lib/settings";
+import { getPrivateSettings, getPublicSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +42,15 @@ export async function POST(req: Request) {
   const captcha = await verifyCaptcha(typeof raw.captchaToken === "string" ? raw.captchaToken : undefined);
   if (!captcha.ok) return NextResponse.json({ error: captcha.error || "人机验证未通过" }, { status: 400 });
 
+  const costPerImage = Math.max(0, Math.floor((await getPublicSettings()).credits.costPerImage || 0));
+  const cost = costPerImage * input.count;
+  if (cost > 0) {
+    const balance = await query("SELECT credits FROM users WHERE id = $1", [user.id]);
+    if (Number(balance.rows[0]?.credits || 0) < cost) {
+      return NextResponse.json({ error: "额度不足，请先签到或联系管理员" }, { status: 402 });
+    }
+  }
+
   const settings = await getPrivateSettings();
   const activeLimit = Math.max(1, settings.queue.activeLimit || 2);
   const maxQueue = Math.max(0, settings.queue.maxQueue || 20);
@@ -69,6 +78,9 @@ export async function POST(req: Request) {
     );
     try {
       const result = await processGeneration(user, input);
+      if (cost > 0) {
+        await query("UPDATE users SET credits = GREATEST(0, credits - $1) WHERE id = $2", [cost, user.id]);
+      }
       await query("UPDATE generation_jobs SET status='succeeded', history_id=$2, finished_at=now() WHERE id=$1", [
         jobId,
         result.historyId,
