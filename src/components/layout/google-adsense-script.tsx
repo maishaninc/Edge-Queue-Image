@@ -14,6 +14,7 @@ function extractSrc(code: string): string | null {
 function isPageAllowed(pathname: string | null, pages: { home: boolean; image: boolean; login: boolean }): boolean {
   if (!pathname) return false;
   if (pathname === "/") return pages.home;
+  if (pathname.startsWith("/go")) return true;
   if (pathname.startsWith("/image")) return pages.image;
   if (pathname.startsWith("/login")) return pages.login;
   return false;

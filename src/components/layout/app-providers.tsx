@@ -10,6 +10,7 @@ import zhCN from "antd/locale/zh_CN";
 
 import { ClientRootInit } from "@/components/layout/client-root-init";
 import { GoogleAdSenseScript } from "@/components/layout/google-adsense-script";
+import { LoginModal } from "@/components/login-modal";
 import { getAntThemeConfig } from "@/lib/app-theme";
 import { useLocaleStore } from "@/stores/use-locale-store";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -45,6 +46,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <QueryClientProvider client={queryClient}>
             <GoogleAdSenseScript />
             <ClientRootInit>{children}</ClientRootInit>
+            <LoginModal />
           </QueryClientProvider>
         </App>
       </ProConfigProvider>

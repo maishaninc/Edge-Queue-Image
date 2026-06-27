@@ -127,6 +127,11 @@
     body {
         @apply bg-background text-foreground;
     }
+    /* Ant Design's <App> wraps everything in .ant-app — give it full height so
+       h-full / h-dvh page chains don't collapse. */
+    .ant-app {
+        height: 100%;
+    }
     textarea {
         resize: none;
     }

@@ -45,6 +45,13 @@ export type PublicSettings = {
   };
   checkIn: { enabled: boolean };
   credits: { costPerImage: number };
+  home: {
+    landingEnabled: boolean;
+    countdownEnabled: boolean;
+    countdownSeconds: number;
+    countdownAds: boolean;
+    adSlot: string;
+  };
 };
 
 export type PrivateOAuthProvider = {
@@ -89,6 +96,7 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   },
   checkIn: { enabled: false },
   credits: { costPerImage: 0 },
+  home: { landingEnabled: true, countdownEnabled: true, countdownSeconds: 5, countdownAds: true, adSlot: "" },
 };
 
 export const DEFAULT_PRIVATE_SETTINGS: PrivateSettings = {

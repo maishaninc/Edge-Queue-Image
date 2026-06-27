@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
+import { useAuthModal } from "@/stores/use-auth-modal";
 import { useConfigStore } from "@/stores/use-config-store";
 import { detectLocale, useLocaleStore } from "@/stores/use-locale-store";
 import { readStoredTheme, useThemeStore } from "@/stores/use-theme-store";
@@ -10,7 +11,7 @@ import { useUserStore } from "@/stores/use-user-store";
 
 /**
  * Client bootstrap: hydrate theme/locale from storage, load public config, hydrate
- * the current user, and enforce login on the image workbench when required.
+ * the current user, and pop the login modal on protected pages when required.
  */
 export function ClientRootInit({ children }: { children: ReactNode }) {
   const setTheme = useThemeStore((state) => state.setTheme);
@@ -20,8 +21,8 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
   const isReady = useUserStore((state) => state.isReady);
   const publicSettings = useConfigStore((state) => state.publicSettings);
   const loadPublic = useConfigStore((state) => state.loadPublic);
+  const setAuthModal = useAuthModal((state) => state.setOpen);
   const pathname = usePathname();
-  const router = useRouter();
 
   useEffect(() => {
     const storedTheme = readStoredTheme();
@@ -34,10 +35,11 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isReady || !publicSettings || !pathname) return;
     const requiresLogin = publicSettings.access?.imageLoginRequired !== false;
-    if (pathname.startsWith("/image") && requiresLogin && !user) {
-      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+    const onProtected = pathname.startsWith("/image") || pathname.startsWith("/go");
+    if (onProtected && requiresLogin && !user) {
+      setAuthModal(true);
     }
-  }, [isReady, publicSettings, user, pathname, router]);
+  }, [isReady, publicSettings, user, pathname, setAuthModal]);
 
   return <>{children}</>;
 }

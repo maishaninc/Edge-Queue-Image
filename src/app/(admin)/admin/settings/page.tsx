@@ -24,7 +24,7 @@ import {
 import { fetchAdminSettings, saveAdminSettings, testChannel, type AdminSettings } from "@/services/api/admin";
 import type { ModelChannel } from "@/lib/settings-defaults";
 
-const TAB_KEYS = ["model", "thirdParty", "access", "captcha", "checkIn", "runtime"] as const;
+const TAB_KEYS = ["model", "thirdParty", "access", "captcha", "checkIn", "home", "runtime"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 export default function AdminSettingsPage() {
@@ -70,6 +70,7 @@ export default function AdminSettingsPage() {
     { key: "access", label: "注册与访问", children: <AccessTab settings={settings} onSaved={reload} /> },
     { key: "captcha", label: "验证码", children: <CaptchaTab settings={settings} onSaved={reload} /> },
     { key: "checkIn", label: "签到额度", children: <CheckInTab settings={settings} onSaved={reload} /> },
+    { key: "home", label: "首页跳转", children: <HomeTab settings={settings} onSaved={reload} /> },
     { key: "runtime", label: "运行配置", children: <RuntimeTab settings={settings} onSaved={reload} /> },
   ];
 
@@ -556,6 +557,53 @@ function CheckInTab({ settings, onSaved }: TabProps) {
           extra="设为大于 0 时，生成图片会扣减用户额度；用户可通过每日签到获取额度。"
         >
           <InputNumber min={0} style={{ width: "100%" }} />
+        </Form.Item>
+        <Button type="primary" loading={saving} onClick={onSave}>
+          保存
+        </Button>
+      </Form>
+    </Card>
+  );
+}
+
+// ----------------------------- Home / landing -----------------------------
+
+function HomeTab({ settings, onSaved }: TabProps) {
+  const { saving, save } = useSaver(onSaved);
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    form.setFieldsValue({
+      landingEnabled: settings.public.home.landingEnabled,
+      countdownEnabled: settings.public.home.countdownEnabled,
+      countdownSeconds: settings.public.home.countdownSeconds,
+      countdownAds: settings.public.home.countdownAds,
+      adSlot: settings.public.home.adSlot,
+    });
+  }, [form, settings]);
+
+  const onSave = async () => {
+    const values = await form.validateFields();
+    await save({ public: { home: values } });
+  };
+
+  return (
+    <Card title="首页与跳转" style={{ maxWidth: 560 }}>
+      <Form form={form} layout="vertical">
+        <Form.Item name="landingEnabled" label="启用网站首页" valuePropName="checked" extra="关闭后，根路径直接进入生图工作台（或倒计时页）。">
+          <Switch />
+        </Form.Item>
+        <Form.Item name="countdownEnabled" label="前往生成时经过倒计时页" valuePropName="checked" extra="开启后，点击「前往生成」会先进入倒计时页，再跳转工作台。">
+          <Switch />
+        </Form.Item>
+        <Form.Item name="countdownSeconds" label="倒计时秒数">
+          <InputNumber min={1} max={60} style={{ width: "100%" }} />
+        </Form.Item>
+        <Form.Item name="countdownAds" label="倒计时页四周显示谷歌广告" valuePropName="checked" extra="需先在「谷歌广告」里填好 AdSense 脚本。">
+          <Switch />
+        </Form.Item>
+        <Form.Item name="adSlot" label="广告位 Slot ID（AdSense 广告单元 ID，可留空用自动广告）">
+          <Input placeholder="例如 1234567890" />
         </Form.Item>
         <Button type="primary" loading={saving} onClick={onSave}>
           保存

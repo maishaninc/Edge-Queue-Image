@@ -66,7 +66,7 @@ function LoginContent() {
   };
 
   return (
-    <main className="aivro-wire-surface flex h-full min-h-0 items-center justify-center overflow-y-auto bg-[#080808] px-5 py-8 text-stone-200">
+    <main className="aivro-wire-surface flex h-dvh min-h-0 items-center justify-center overflow-y-auto bg-[#080808] px-5 py-8 text-stone-200">
       <AivroReveal className="w-full max-w-[444px]">
         <Form
           form={form}

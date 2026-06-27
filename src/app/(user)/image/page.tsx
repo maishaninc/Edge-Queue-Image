@@ -23,6 +23,7 @@ import {
   type GenImage,
   type HistoryItem,
 } from "@/services/api/image";
+import { useAuthModal } from "@/stores/use-auth-modal";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -44,6 +45,8 @@ export default function ImagePage() {
   const { message } = App.useApp();
   const { locale } = useI18n();
   const user = useUserStore((state) => state.user);
+  const isReady = useUserStore((state) => state.isReady);
+  const setAuthModal = useAuthModal((state) => state.setOpen);
   const config = useConfigStore((state) => state.config);
   const updateConfig = useConfigStore((state) => state.updateConfig);
   const publicSettings = useConfigStore((state) => state.publicSettings);
@@ -254,8 +257,31 @@ export default function ImagePage() {
     </div>
   );
 
+  const requiresLogin = publicSettings?.access?.imageLoginRequired !== false;
+  if (requiresLogin && !user) {
+    return (
+      <div className="flex h-dvh flex-col bg-background text-foreground">
+        <AppHeader />
+        <div className="grid flex-1 place-items-center px-6 text-center">
+          {isReady ? (
+            <div className="space-y-4">
+              <p className="text-lg font-medium">
+                {locale === "en-US" ? "Please sign in to use the studio" : "请登录后使用生图工作台"}
+              </p>
+              <Button type="primary" size="large" onClick={() => setAuthModal(true)}>
+                {locale === "en-US" ? "Sign in" : "登录"}
+              </Button>
+            </div>
+          ) : (
+            <AivroDrawableLoader compact />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
+    <div className="flex h-dvh flex-col bg-background text-foreground">
       <AppHeader />
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="thin-scrollbar hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card/40 p-3 lg:block">

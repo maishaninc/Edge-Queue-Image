@@ -6,6 +6,7 @@ import { Coins, Languages, LogOut, Moon, Sun } from "lucide-react";
 
 import { useI18n } from "@/hooks/use-i18n";
 import { checkIn } from "@/services/api/auth";
+import { useAuthModal } from "@/stores/use-auth-modal";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -20,6 +21,7 @@ export function AppHeader() {
   const signOut = useUserStore((state) => state.signOut);
   const setUser = useUserStore((state) => state.setUser);
   const publicSettings = useConfigStore((state) => state.publicSettings);
+  const openLogin = useAuthModal((state) => state.setOpen);
   const { message } = App.useApp();
 
   const dark = theme === "dark";
@@ -106,7 +108,7 @@ export function AppHeader() {
             </button>
           </Dropdown>
         ) : (
-          <Button type="primary" onClick={() => router.push("/login")}>
+          <Button type="primary" onClick={() => openLogin(true)}>
             {t("common.login")}
           </Button>
         )}
